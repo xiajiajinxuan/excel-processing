@@ -18,7 +18,7 @@ Write-Host "虚拟环境创建成功！" -ForegroundColor Green
 
 # 安装依赖
 Write-Host "正在安装依赖..." -ForegroundColor Cyan
-pip install pyinstaller==5.9.0
+pip install pandas openpyxl numpy pyinstaller
 
 Write-Host ""
 Write-Host "虚拟环境设置完成！您现在可以运行应用程序：" -ForegroundColor Green

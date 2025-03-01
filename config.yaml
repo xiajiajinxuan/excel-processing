@@ -1,0 +1,6 @@
+default_rule: canteen_deduction_rules
+rules:
+  canteen_deduction_rules:
+    display_name: 食堂扣缴规则
+    template: 食堂扣缴.xlsx
+
