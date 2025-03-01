@@ -54,7 +54,7 @@ class ExcelProcessingApp:
         
         # 加载规则
         self.load_rules()
-        
+    
     def load_config(self):
         """加载YAML配置文件"""
         config_path = Path("config.yaml")
