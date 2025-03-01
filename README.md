@@ -4,10 +4,11 @@
 
 ## 功能特点
 
-- 下载和上传Excel模板
+- 支持多种数据处理规则，包括餐饮消费扣缴规则
+- 下载对应规则的Excel模板
 - 上传Excel数据文件进行处理
-- 根据可配置的规则处理Excel数据
-- 生成处理后的新Excel文件
+- 保留原始工作表，并添加处理结果工作表
+- 生成处理后的新Excel文件，保存在output目录
 - 规则可扩展，支持自定义处理逻辑
 
 ## 安装与运行
@@ -17,51 +18,40 @@
 - Python 3.6 或更高版本
 - pandas 库
 - openpyxl 库（用于Excel文件处理）
+- pyyaml 库（用于配置文件）
 
-### 使用虚拟环境（推荐）
+### 安装依赖
 
-#### Windows系统
-1. 双击运行 `setup_env.ps1` 文件（PowerShell脚本）
-2. 等待虚拟环境创建完成和依赖安装
-3. 在打开的命令行窗口中运行：
-   ```
-   python main.py
-   ```
+使用以下命令安装所需依赖：
 
-### 手动安装步骤
+```
+pip install -r requirements.txt
+```
 
-1. 克隆或下载此仓库到本地
-2. 创建虚拟环境（可选但推荐）：
-   ```
-   python -m venv venv
-   ```
-3. 激活虚拟环境：
-   - Windows PowerShell: `.\venv\Scripts\Activate.ps1`
-   - Windows CMD: `venv\Scripts\activate.bat`
-   - Linux/Mac: `source venv/bin/activate`
-4. 安装依赖项：
-   ```
-   pip install pandas openpyxl
-   ```
-5. 运行应用程序：
-   ```
-   python main.py
-   ```
+### 运行应用程序
+
+```
+python main.py
+```
 
 ## 使用说明
 
-### 模板管理
+### 数据处理流程
 
-- **上传模板**：点击"上传模板"按钮，选择一个Excel文件作为模板
-- **下载模板**：从列表中选择一个模板，点击"下载模板"按钮将其保存到本地
-- **删除模板**：从列表中选择一个模板，点击"删除模板"按钮将其删除
+1. 从下拉菜单中选择要应用的处理规则
+2. 点击"下载模板"按钮获取对应的Excel模板
+3. 填写模板后，点击"浏览"按钮选择要处理的Excel文件
+4. 点击"处理数据"按钮开始处理
+5. 处理完成后，结果将保存在output目录下，并可选择直接打开生成的文件
 
-### 数据处理
+### 餐饮消费扣缴规则说明
 
-1. 点击"浏览..."按钮，选择要处理的Excel数据文件
-2. 从下拉菜单中选择要应用的处理规则
-3. 点击"处理数据"按钮开始处理
-4. 处理完成后，可以选择直接打开生成的文件或打开输出目录
+餐饮消费扣缴规则用于处理员工的餐饮消费记录和打卡记录，计算应扣金额：
+
+- 输入文件需包含【消费记录】和【打卡记录】两个工作表
+- 处理后将生成【扣缴记录】和【月度汇总】两个工作表
+- 【扣缴记录】包含每日的就餐减免次数、实际就餐次数和应扣金额
+- 【月度汇总】按月汇总每个员工的就餐和扣款情况
 
 ## 自定义处理规则
 
@@ -71,7 +61,8 @@
 2. 在文件中实现以下两个函数：
    - `process(data_df, **kwargs)`: 处理数据的主函数
    - `get_rule_info()`: 返回规则的描述信息
-3. 点击应用程序中的"刷新规则"按钮加载新规则
+3. 在`config.yaml`文件中添加规则的中文名称和对应模板
+4. 重启应用程序加载新规则
 
 ### 规则示例
 
@@ -94,13 +85,26 @@ def get_rule_info():
     }
 ```
 
+### 配置文件示例
+
+在`config.yaml`中添加规则配置：
+
+```yaml
+rules:
+  my_rule:
+    display_name: 我的自定义规则
+    template: my_rule_template.xlsx
+```
+
 ## 目录结构
 
 - `main.py`: 主应用程序文件
+- `config.yaml`: 配置文件，包含规则的中文名称和模板映射
 - `rules/`: 存放处理规则的目录
   - `__init__.py`: 包初始化文件
   - `example_rule.py`: 示例规则
-  - `column_filter_rule.py`: 列过滤规则
-  - `data_summary_rule.py`: 数据汇总规则
+  - `meal_consumption_rule.py`: 餐饮消费扣缴规则
+  - `meal_consumption_in_one_excel_rule.py`: 单Excel文件餐饮消费扣缴规则
 - `templates/`: 存放Excel模板的目录
-- `output/`: 存放处理结果的目录 
+- `output/`: 存放处理结果的目录
+- `requirements.txt`: 依赖项列表 
