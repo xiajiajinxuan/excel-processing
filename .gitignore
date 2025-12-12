@@ -30,6 +30,7 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+!excel_tool.spec
 
 # Installer logs
 pip-log.txt
@@ -121,3 +122,23 @@ dmypy.json
 output/
 *.xlsx
 !templates/*.xlsx
+
+# Temporary files and logs
+*.log
+*.tmp
+*.temp
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Test output
+.pytest_cache/
+.coverage
+htmlcov/

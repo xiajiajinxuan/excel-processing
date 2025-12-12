@@ -1,5 +1,8 @@
-default_rule: canteen_deduction_rules
+default_rule: continuous_work_rule
 rules:
+  continuous_work_rule:
+    display_name: 连续工作超时检测
+    template: 工作超6天查找.xlsx
   canteen_deduction_rules:
     display_name: 食堂扣缴规则
     template: 食堂扣缴.xlsx
