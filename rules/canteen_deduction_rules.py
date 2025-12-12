@@ -112,74 +112,84 @@ def process(data_df, **kwargs):
     # 创建结果DataFrame
     result_df = attendance_df[['姓名', '工号', '日期', '年月', '实际出勤工时']].copy()
     
-    # 1. 计算享受就餐减免次数
-    def calculate_meal_exemption(hours):
-        if hours < 4:
-            return 0
-        elif hours < 8:
-            return 1
-        else:
-            return 2
+    # 1. 计算享受就餐减免次数 - 使用向量化操作优化
+    # 使用numpy的where函数进行向量化计算，比apply快得多
+    result_df['享受就餐减免次数'] = np.where(
+        result_df['实际出勤工时'] < 4, 0,
+        np.where(result_df['实际出勤工时'] < 8, 1, 2)
+    )
     
-    result_df['享受就餐减免次数'] = result_df['实际出勤工时'].apply(calculate_meal_exemption)
-    
-    # 2. 计算实际就餐次数
+    # 2. 计算实际就餐次数和金额 - 使用merge优化，避免循环
+    # 初始化列
     result_df['实际就餐次数'] = 0
     result_df['实际就餐金额'] = 0.0
     result_df['消费明细'] = ''
     
-    # 处理每一行打卡记录
-    for idx, row in result_df.iterrows():
-        # 查找对应的消费记录
-        if not consumption_df.empty:
-            matching_records = consumption_df[
-                (consumption_df['工号'] == row['工号']) & 
-                (consumption_df['交易日期'].dt.date == row['日期'].date())
-            ]
-            
-            # 计算实际就餐次数
-            meal_count = len(matching_records)
-            result_df.at[idx, '实际就餐次数'] = meal_count
-            
-            # 计算实际就餐金额和消费明细
-            if meal_count > 0:
-                total_amount = 0.0
-                meal_details = []
-                
-                for _, meal_row in matching_records.iterrows():
-                    meal_type = meal_row['餐别']
-                    # 根据餐别计算金额
-                    if meal_type == '早餐':
-                        amount = 4.3
-                    else:
-                        amount = 7.0
-                    
-                    total_amount += amount
-                    meal_details.append(f"{meal_type}:{amount}")
-                
-                result_df.at[idx, '实际就餐金额'] = round(total_amount, 2)
-                result_df.at[idx, '消费明细'] = ';'.join(meal_details)
+    if not consumption_df.empty:
+        # 为消费记录添加日期列（仅日期部分，用于匹配）
+        consumption_df['交易日期_日期'] = consumption_df['交易日期'].dt.date
+        
+        # 为打卡记录添加日期列（仅日期部分，用于匹配）
+        result_df['日期_日期'] = result_df['日期'].dt.date
+        
+        # 优化：直接对消费记录进行分组统计，然后merge回result_df
+        # 计算每餐的金额（向量化操作）
+        consumption_df['餐别金额'] = np.where(consumption_df['餐别'] == '早餐', 4.3, 7.0)
+        
+        # 计算消费明细字符串
+        consumption_df['消费明细项'] = consumption_df['餐别'].astype(str) + ':' + consumption_df['餐别金额'].astype(str)
+        
+        # 按工号和日期分组，计算就餐次数和金额
+        meal_stats = consumption_df.groupby(['工号', '交易日期_日期']).agg({
+            '餐别': 'count',  # 就餐次数
+            '餐别金额': 'sum',  # 总金额
+            '消费明细项': lambda x: ';'.join(x.astype(str))  # 消费明细
+        }).reset_index()
+        
+        # 重命名列，统一使用'日期_日期'作为列名以便merge，并重命名统计列
+        meal_stats = meal_stats.rename(columns={
+            '交易日期_日期': '日期_日期',
+            '餐别': '实际就餐次数',
+            '餐别金额': '实际就餐金额',
+            '消费明细项': '消费明细'
+        })
+        
+        # 将统计结果合并回result_df
+        # 先删除已初始化的列，避免merge时的列名冲突
+        result_df_temp = result_df.drop(columns=['实际就餐次数', '实际就餐金额', '消费明细'])
+        result_df = pd.merge(
+            result_df_temp,
+            meal_stats,
+            on=['工号', '日期_日期'],
+            how='left'
+        )
+        
+        # 填充缺失值（没有匹配记录的情况）
+        result_df['实际就餐次数'] = result_df['实际就餐次数'].fillna(0).astype(int)
+        result_df['实际就餐金额'] = result_df['实际就餐金额'].fillna(0.0).round(2)
+        result_df['消费明细'] = result_df['消费明细'].fillna('')
+        
+        # 删除临时列
+        if '日期_日期' in result_df.columns:
+            result_df = result_df.drop(columns=['日期_日期'])
     
-    # 4. 计算应扣就餐减免次数
-    result_df['应扣就餐减免次数'] = result_df['实际就餐次数'] - result_df['享受就餐减免次数']
-    result_df['应扣就餐减免次数'] = result_df['应扣就餐减免次数'].apply(lambda x: max(0, x))
+    # 4. 计算应扣就餐减免次数 - 使用向量化操作
+    result_df['应扣就餐减免次数'] = (result_df['实际就餐次数'] - result_df['享受就餐减免次数']).clip(lower=0)
     
-    # 5. 计算应扣金额
-    def calculate_deduction_amount(row):
-        if row['实际就餐次数'] == 0:
-            return 0
-        else:
-            avg_meal_cost = row['实际就餐金额'] / row['实际就餐次数']
-            return round(avg_meal_cost * row['应扣就餐减免次数'], 2)
-    
-    result_df['应扣金额'] = result_df.apply(calculate_deduction_amount, axis=1)
+    # 5. 计算应扣金额 - 使用向量化操作代替apply
+    # 使用numpy的where进行条件计算
+    result_df['应扣金额'] = np.where(
+        result_df['实际就餐次数'] == 0,
+        0,
+        (result_df['实际就餐金额'] / result_df['实际就餐次数'] * result_df['应扣就餐减免次数']).round(2)
+    )
     
     # 添加备注列
     result_df['备注'] = ''
     
-    # 创建月度汇总
+    # 创建月度汇总 - 优化聚合函数
     monthly_summary = result_df.groupby(['工号', '年月']).agg({
-        '姓名': lambda x: x.iloc[-1],  # 取最后一个姓名
+        '姓名': 'last',  # 使用'last'代替lambda函数，更快
         '享受就餐减免次数': 'sum',
         '实际就餐次数': 'sum',
         '实际就餐金额': 'sum',
@@ -208,6 +218,6 @@ def get_rule_info():
     return {
         "name": "单Excel文件餐饮消费扣缴规则",
         "description": "处理单个Excel文件中的消费记录和打卡记录工作表，计算员工的就餐减免次数、实际就餐次数、实际就餐金额、应扣就餐减免次数和应扣金额，并生成扣缴记录和月度汇总工作表",
-        "version": "1.0",
+        "version": "1.1",
         "author": "系统"
-    } 
+    }
