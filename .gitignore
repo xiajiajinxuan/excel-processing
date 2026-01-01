@@ -138,6 +138,9 @@ desktop.ini
 *.backup
 *~
 
+# Git commit message files
+commit_message.txt
+
 # Test output
 .pytest_cache/
 .coverage
