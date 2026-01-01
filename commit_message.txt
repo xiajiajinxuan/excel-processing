@@ -1,0 +1,6 @@
+docs: 更新规则文档版本信息
+
+- 更新canteen_deduction_rules.md版本号到v1.1
+- 更新规则文档中的性能说明
+- 更新rules/README.md中的版本信息
+
