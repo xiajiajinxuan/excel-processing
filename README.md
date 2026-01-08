@@ -56,8 +56,8 @@ Excel数据处理工具是一个功能强大的桌面应用程序，旨在简化
 ├── config.yaml                  # 配置文件（规则和模板映射）
 ├── requirements.txt             # Python依赖包列表
 ├── excel_tool.spec              # PyInstaller打包配置文件
-├── create_venv.bat              # Windows批处理脚本（创建虚拟环境）
-├── setup_env.ps1                # PowerShell脚本（创建虚拟环境）
+├── build.bat                    # Windows批处理脚本（一键打包）
+├── build.ps1                    # PowerShell脚本（一键打包）
 │
 ├── rules/                       # 处理规则模块目录
 │   ├── __init__.py              # 规则包初始化文件
@@ -436,53 +436,6 @@ rules:
    - 文件名格式：`原文件名_processed.xlsx`
    - 可选择直接打开生成的文件
 
-### 内置规则说明
-
-> 📖 **详细文档**：所有规则的完整说明文档请查看 [rules/README.md](rules/README.md)
-
-#### 1. 食堂扣缴规则 (canteen_deduction_rules)
-
-**功能**：处理员工食堂消费记录，计算扣缴金额
-
-**详细文档**：[canteen_deduction_rules.md](rules/canteen_deduction_rules.md)
-
-**输入要求**：
-- Excel文件必须包含两个工作表：
-  - **消费记录**：包含工号、姓名、交易金额、交易日期、餐别等列
-  - **打卡记录**：包含姓名、工号、日期、实际出勤工时等列
-
-**输出结果**：
-- **扣缴记录**工作表：包含每日的扣缴明细
-- **月度汇总**工作表：按工号和月份汇总的扣缴数据
-
-**处理逻辑**：
-- 根据实际出勤工时计算享受就餐减免次数（<4小时：0次，4-8小时：1次，≥8小时：2次）
-- 统计实际就餐次数和金额
-- 计算应扣就餐减免次数和应扣金额
-
-**计算逻辑详解**：详见 [规则说明文档](rules/canteen_deduction_rules.md#计算逻辑详解)
-
-#### 2. 连续工作超时检测规则 (continuous_work_rule)
-
-**功能**：检测连续工作超过6天的记录并标记
-
-**详细文档**：[continuous_work_rule.md](rules/continuous_work_rule.md)
-
-**输入要求**：
-- Excel文件格式需符合模板要求
-- 从第3行开始为数据行
-- 第1列为姓名，第2列开始为日期列
-
-**输出结果**：
-- 连续工作超过6天的单元格标记为红色
-- 保留原始数据格式
-
-**处理逻辑**：
-- 逐行检测连续工作天数
-- 标记连续工作超过6天的日期范围
-
-**计算逻辑详解**：详见 [规则说明文档](rules/continuous_work_rule.md#计算逻辑详解)
-
 ### 常见问题
 
 **Q: 处理后的文件保存在哪里？**  
@@ -825,13 +778,39 @@ def get_rule_info():
 
 ## 📦 打包部署
 
-### 使用PyInstaller打包
+### 快速打包（推荐）
 
-项目已配置 `excel_tool.spec` 文件，可直接使用：
+项目提供了自动化打包脚本，一键完成打包流程：
+
+**Windows批处理脚本（推荐）**：
+```bash
+# 双击运行或在命令行执行
+build.bat
+```
+
+**PowerShell脚本**：
+```powershell
+# 在PowerShell中执行
+.\build.ps1
+```
+
+**脚本功能**：
+- ✅ 自动检查Python环境
+- ✅ 自动检查并安装PyInstaller（如未安装）
+- ✅ 自动检查并安装依赖包（pandas、openpyxl等）
+- ✅ 自动清理旧的构建文件
+- ✅ 执行打包并显示结果信息
+
+### 手动打包
+
+如果需要手动控制打包过程，可以使用以下命令：
 
 ```bash
+# 清理旧的构建文件（可选）
+rmdir /s /q build dist
+
 # 打包命令
-pyinstaller excel_tool.spec
+python -m PyInstaller excel_tool.spec --clean
 
 # 打包后的文件位于 dist/ 目录
 # 可执行文件：Excel数据处理工具.exe

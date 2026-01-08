@@ -13,9 +13,16 @@ a = Analysis(
     ],
     hiddenimports=[
         'pandas',
+        'pandas._libs.tslibs.timedeltas',
+        'pandas._libs.tslibs.nattype',
+        'pandas._libs.tslibs.np_datetime',
         'numpy',
+        'numpy.lib.format',
         'openpyxl',
-        'yaml'
+        'openpyxl.cell._writer',
+        'yaml',
+        'yaml.loader',
+        'yaml.dumper',
     ],
     hookspath=[],
     hooksconfig={},

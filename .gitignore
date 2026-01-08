@@ -145,3 +145,9 @@ commit_message.txt
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Cursor related
+.cursor/
+
+# Git manager
+.git_manager/
