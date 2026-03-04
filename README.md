@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
 
-一个基于Python和Tkinter开发的桌面应用程序，用于处理Excel数据。采用插件式架构设计，支持多种数据处理规则，可灵活扩展自定义处理逻辑。
+一个基于 Python 和 PyQt6 开发的桌面应用程序，用于处理Excel数据。采用插件式架构设计，支持多种数据处理规则，可灵活扩展自定义处理逻辑。
 
 ## 🚀 项目简介
 
@@ -32,7 +32,7 @@ Excel数据处理工具是一个功能强大的桌面应用程序，旨在简化
 ### 核心技术
 
 - **Python 3.6+**：主要编程语言
-- **Tkinter**：GUI框架（Python标准库）
+- **PyQt6**：GUI 框架（跨平台、现代界面）
 - **pandas**：数据处理和分析
 - **openpyxl**：Excel文件读写操作
 - **PyYAML**：配置文件管理
@@ -46,7 +46,8 @@ Excel数据处理工具是一个功能强大的桌面应用程序，旨在简化
 | openpyxl | >=3.0.7 | Excel文件操作 |
 | numpy | ==1.24.3 | 数值计算支持 |
 | pyyaml | >=6.0 | YAML配置文件解析 |
-| pyinstaller | ==5.9.0 | 可执行文件打包 |
+| PyQt6 | >=6.4.0 | GUI 界面 |
+| pyinstaller | >=5.9.0 | 可执行文件打包 |
 
 ## 📁 项目结构
 
@@ -106,7 +107,7 @@ Excel数据处理工具是一个功能强大的桌面应用程序，旨在简化
 ```mermaid
 graph TB
     subgraph "用户界面层"
-        UI[Tkinter GUI界面]
+        UI[PyQt6 GUI界面]
         FileSelect[文件选择器]
         RuleSelect[规则选择器]
         ResultDisplay[结果展示区]
@@ -387,6 +388,12 @@ rules:
   - **规则ID**：对应 `rules/` 目录下的Python文件名（不含.py扩展名）
   - **display_name**：在GUI界面中显示的规则名称
   - **template**：对应的Excel模板文件名（位于 `templates/` 目录）
+- **update**（可选）：检查更新配置
+  - **enabled**：是否启用更新检查（true/false）
+  - **source**：`github` 或 `gitee`
+  - **owner**：仓库所有者或组织名
+  - **repo**：仓库名
+  - **tag_prefix**：可选，仅当 Release 的 tag 符合该前缀时才视为本应用发布
 
 ### 添加新规则配置
 
@@ -402,6 +409,20 @@ rules:
 
 3. 在 `templates/` 目录下放置对应的模板文件
 4. 重启应用程序，新规则将自动加载
+
+## 📌 版本管理与检查更新
+
+- **版本号**：应用版本在 `version.py` 中统一维护（`__version__`），窗口标题与关于对话框中会显示当前版本。
+- **检查更新**：菜单「帮助」→「检查更新」会从 GitHub 或 Gitee 的 Releases 获取最新版本；若有新版本可一键下载并自动替换当前 exe 后重启。
+- **关于**：菜单「帮助」→「关于」可查看当前版本与简要说明。
+- **安装目录建议**：为支持自动更新（覆盖 exe），请将程序安装在**有写入权限的目录**（如用户目录下的自定义文件夹）。若安装在 Program Files 等受保护目录，自动更新将无法覆盖，程序会提示并打开浏览器到发布页手动下载。
+
+### 发布新版本（维护者）
+
+1. 在 `version.py` 中修改 `__version__`（如 `1.0.1`）。
+2. 重新打包：`pyinstaller excel_tool.spec`，得到 `dist/Excel数据处理工具.exe`。
+3. 在 GitHub 或 Gitee 上创建 **Release**，tag 使用语义化版本（如 `v1.0.1`），在 Release 中上传 `Excel数据处理工具.exe` 作为附件（asset）。
+4. 确保 `config.yaml` 中 `update` 的 `owner`、`repo` 与仓库一致，用户端即可通过「检查更新」获取并安装新版本。
 
 ## 📚 使用指南
 
@@ -858,6 +879,8 @@ Excel数据处理工具/
 3. 确保目录结构完整
 4. 测试可执行文件是否正常运行
 
+**安装目录建议**：若需使用「检查更新」后的自动更新（下载并替换 exe），请将整个分发包放在**有写入权限的目录**（如用户目录下的文件夹）；避免放在 Program Files 等受保护目录，否则自动更新会提示手动下载。
+
 ### 部署环境要求
 
 **目标系统**：
@@ -926,7 +949,7 @@ chore: 构建过程或辅助工具的变动
 - [pandas文档](https://pandas.pydata.org/docs/)
 - [openpyxl文档](https://openpyxl.readthedocs.io/)
 - [PyInstaller文档](https://pyinstaller.readthedocs.io/)
-- [Tkinter文档](https://docs.python.org/3/library/tkinter.html)
+- [PyQt6 文档](https://www.riverbankcomputing.com/static/Docs/PyQt6/)
 
 ## 📝 更新日志
 
@@ -939,6 +962,9 @@ chore: 构建过程或辅助工具的变动
 - ✅ 支持模板下载功能
 - ✅ 支持打包为可执行文件
 - ✅ 图形化用户界面
+- ✅ 版本管理（`version.py` 单一版本源，标题与关于显示版本）
+- ✅ 检查更新（帮助菜单，GitHub/Gitee Releases API）
+- ✅ 自动更新（下载新 exe 并替换后重启，无写权限时降级为打开下载链接）
 
 ## 👥 作者
 
