@@ -8,7 +8,8 @@
       "version": "1.0",
       "files": [
         { "path": "canteen_deduction_rules.py", "target": "rules" },
-        { "path": "canteen_deduction_rules.md", "target": "rules" }
+        { "path": "canteen_deduction_rules.md", "target": "rules" },
+        { "path": "食堂扣缴.xlsx", "target": "templates" }
       ],
       "template": "食堂扣缴.xlsx"
     },
@@ -19,7 +20,8 @@
       "version": "1.0",
       "files": [
         { "path": "continuous_work_rule.py", "target": "rules" },
-        { "path": "continuous_work_rule.md", "target": "rules" }
+        { "path": "continuous_work_rule.md", "target": "rules" },
+        { "path": "工作超6天查找.xlsx", "target": "templates" }
       ],
       "template": "工作超6天查找.xlsx"
     }
