@@ -166,6 +166,7 @@ def run_remote_rules_dialog(parent, get_config, save_config, refresh_rule_list, 
         QCheckBox,
         QWidget,
         QApplication,
+        QLineEdit,
     )
     from PyQt6.QtCore import Qt
 
@@ -189,6 +190,7 @@ def run_remote_rules_dialog(parent, get_config, save_config, refresh_rule_list, 
             self._rules_dir = rules_dir
             self._templates_dir = templates_dir
             self._manifest_data = None
+            self._all_rules = []
             self._local_ids = set()
             self._setup_ui()
 
@@ -205,6 +207,14 @@ def run_remote_rules_dialog(parent, get_config, save_config, refresh_rule_list, 
             self._status_label = QLabel("点击「刷新清单」获取远程规则列表")
             self._status_label.setStyleSheet(f"color: {COLORS.get('text_secondary', '#666')}; font-size: 13px;")
             layout.addWidget(self._status_label)
+
+            # 关键字搜索框：支持按规则名称 / 说明 / ID 过滤
+            self._search_edit = QLineEdit()
+            self._search_edit.setPlaceholderText("输入关键字筛选规则（名称 / 说明 / ID）…")
+            self._search_edit.setClearButtonEnabled(True)
+            self._search_edit.textChanged.connect(self._on_search_changed)
+            self._search_edit.setMinimumHeight(30)
+            layout.addWidget(self._search_edit)
 
             self._table = QTableWidget(0, 4)
             self._table.setHorizontalHeaderLabels(["选择", "规则名称", "说明", "状态"])
@@ -257,12 +267,34 @@ def run_remote_rules_dialog(parent, get_config, save_config, refresh_rule_list, 
                 QMessageBox.warning(self, "获取清单失败", err)
                 return
             self._manifest_data = data
+            self._all_rules = list((data.get("rules") or []))
             self._local_ids = _get_local_rule_ids(self._rules_dir)
             self._fill_table()
-            self._status_label.setText(f"已加载 {len(data.get('rules') or [])} 条远程规则")
+            self._status_label.setText(f"已加载 {len(self._all_rules)} 条远程规则")
 
-        def _fill_table(self):
-            rules = (self._manifest_data or {}).get("rules") or []
+        def _on_search_changed(self, text: str):
+            """根据搜索关键字过滤规则列表。"""
+            keyword = (text or "").strip().lower()
+            if not self._manifest_data:
+                return
+            if not keyword:
+                self._fill_table()
+                return
+            filtered = []
+            for r in self._all_rules:
+                rule_id = (r.get("rule_id") or "").lower()
+                name = (r.get("display_name") or "").lower()
+                desc = (r.get("description") or "").lower()
+                if keyword in rule_id or keyword in name or keyword in desc:
+                    filtered.append(r)
+            self._fill_table(filtered)
+            self._status_label.setText(
+                f"已加载 {len(self._all_rules)} 条远程规则，当前筛选出 {len(filtered)} 条"
+            )
+
+        def _fill_table(self, rules=None):
+            if rules is None:
+                rules = self._all_rules or ((self._manifest_data or {}).get("rules") or [])
             self._table.setRowCount(len(rules))
             for row, r in enumerate(rules):
                 rule_id = r.get("rule_id") or ""

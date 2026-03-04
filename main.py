@@ -29,7 +29,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
-    QComboBox,
     QTextEdit,
     QFileDialog,
     QMessageBox,
@@ -38,6 +37,8 @@ from PyQt6.QtWidgets import (
     QDialog,
     QFrame,
     QSplitter,
+    QListWidget,
+    QListWidgetItem,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction
@@ -146,6 +147,7 @@ class ExcelProcessingApp(QMainWindow):
 
         self.rule_ids = []
         self.available_rules = []
+        self.current_rule_id = None
         self._download_dialog = None
 
         self.load_config()
@@ -216,10 +218,13 @@ class ExcelProcessingApp(QMainWindow):
             f"color: {COLORS['text_secondary']}; font-size: 13px; min-width: 52px; "
             f"font-family: {FONT_FAMILY}; background: transparent;"
         )
-        self.rule_combo = QComboBox()
-        self.rule_combo.setMinimumHeight(36)
-        self.rule_combo.setStyleSheet(f"""
-            QComboBox {{
+        # 使用只读输入框 + 选择按钮的组合，让宽度与“文件”行保持一致
+        self.rule_display = QLineEdit()
+        self.rule_display.setReadOnly(True)
+        self.rule_display.setPlaceholderText("请选择处理规则…")
+        self.rule_display.setMinimumHeight(36)
+        self.rule_display.setStyleSheet(f"""
+            QLineEdit {{
                 background: {COLORS['surface']};
                 border: 1px solid {COLORS['border']};
                 border-radius: {COLORS['radius_md']}px;
@@ -228,12 +233,16 @@ class ExcelProcessingApp(QMainWindow):
                 font-family: {FONT_FAMILY};
                 color: {COLORS['text']};
             }}
-            QComboBox:focus {{ border-color: {COLORS['border_focus']}; }}
-            QComboBox::drop-down {{ border: none; }}
+            QLineEdit:focus {{ border-color: {COLORS['border_focus']}; }}
         """)
+        btn_pick_rule = QPushButton("选择规则…")
+        btn_pick_rule.setStyleSheet(BUTTON_STYLE_SECONDARY)
+        btn_pick_rule.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_pick_rule.setFixedHeight(36)
+        btn_pick_rule.clicked.connect(self.open_rule_picker)
         rule_row.addWidget(lbl_rule)
-        rule_row.addWidget(self.rule_combo)
-        rule_row.addStretch()
+        rule_row.addWidget(self.rule_display)
+        rule_row.addWidget(btn_pick_rule)
         wf_layout.addLayout(rule_row)
 
         btn_row = QHBoxLayout()
@@ -500,10 +509,23 @@ del /f /q "%~f0" 2>nul
                     self.config["rules"] = {}
                 self.config["rules"][rule_id] = {"display_name": rule_id, "template": f"{rule_id}_template.xlsx"}
                 self.save_config()
-        self.rule_combo.clear()
-        self.rule_combo.addItems(rule_display_names)
-        if rule_display_names:
-            self.rule_combo.setCurrentIndex(0)
+        # 如果当前选中的规则仍然存在，则保持不变；否则默认选中第一条
+        if self.current_rule_id in self.rule_ids:
+            self.set_current_rule(self.current_rule_id)
+        elif self.rule_ids:
+            self.set_current_rule(self.rule_ids[0])
+        else:
+            self.current_rule_id = None
+            self.rule_display.clear()
+
+    def set_current_rule(self, rule_id: str | None):
+        """设置当前选中的规则并更新显示文本。"""
+        if not rule_id or rule_id not in self.rule_ids:
+            self.current_rule_id = None
+            self.rule_display.clear()
+            return
+        self.current_rule_id = rule_id
+        self.rule_display.setText(self.get_rule_display_name(rule_id))
 
     def browse_file(self):
         path, _ = QFileDialog.getOpenFileName(self, "选择Excel文件", "", "Excel文件 (*.xlsx);;所有文件 (*.*)")
@@ -512,15 +534,13 @@ del /f /q "%~f0" 2>nul
             file_name = os.path.basename(path)
             rule_id = self.get_rule_by_template(file_name)
             if rule_id and rule_id in self.rule_ids:
-                idx = self.rule_ids.index(rule_id)
-                self.rule_combo.setCurrentIndex(idx)
+                self.set_current_rule(rule_id)
 
     def download_template(self):
-        idx = self.rule_combo.currentIndex()
-        if idx < 0:
+        if not self.current_rule_id:
             QMessageBox.critical(self, "错误", "请先选择一个处理规则")
             return
-        rule_id = self.rule_ids[idx]
+        rule_id = self.current_rule_id
         template_name = self.get_rule_template(rule_id)
         if not template_name:
             QMessageBox.critical(self, "错误", f"规则 '{rule_id}' 没有对应的模板")
@@ -543,11 +563,10 @@ del /f /q "%~f0" 2>nul
         if not file_path:
             QMessageBox.critical(self, "错误", "请选择Excel文件")
             return
-        idx = self.rule_combo.currentIndex()
-        if idx < 0:
+        if not self.current_rule_id:
             QMessageBox.critical(self, "错误", "请选择处理规则")
             return
-        rule_id = self.rule_ids[idx]
+        rule_id = self.current_rule_id
         try:
             rule_module = importlib.import_module(f"rules.{rule_id}")
             data_df = pd.read_excel(file_path)
@@ -558,6 +577,74 @@ del /f /q "%~f0" 2>nul
             QMessageBox.critical(self, "错误", error_message)
             self.result_text.clear()
             self.result_text.setPlainText(error_message)
+
+    def open_rule_picker(self):
+        """弹窗选择本地已安装的处理规则，支持简单搜索。"""
+        if not self.rule_ids:
+            QMessageBox.information(self, "提示", "当前没有可用的处理规则，请先在 rules 目录中添加规则。")
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("选择处理规则")
+        dlg.setMinimumSize(360, 360)
+        dlg.setStyleSheet(
+            f"QDialog {{ background: {COLORS['surface']}; }} "
+            f"QLabel {{ color: {COLORS['text']}; font-family: {FONT_FAMILY}; }} "
+        )
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        lbl = QLabel("请选择要使用的处理规则：")
+        layout.addWidget(lbl)
+
+        search_edit = QLineEdit()
+        search_edit.setPlaceholderText("输入关键字筛选规则（名称 / ID）…")
+        layout.addWidget(search_edit)
+
+        list_widget = QListWidget()
+        for rid in self.rule_ids:
+            name = self.get_rule_display_name(rid)
+            item = QListWidgetItem(f"{name}  ({rid})")
+            item.setData(Qt.ItemDataRole.UserRole, rid)
+            list_widget.addItem(item)
+            if rid == self.current_rule_id:
+                list_widget.setCurrentItem(item)
+        layout.addWidget(list_widget)
+
+        btn_row = QHBoxLayout()
+        btn_ok = QPushButton("确定")
+        btn_ok.setStyleSheet(BUTTON_STYLE_PRIMARY)
+        btn_cancel = QPushButton("取消")
+        btn_cancel.setStyleSheet(BUTTON_STYLE_SECONDARY)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_cancel)
+        btn_row.addWidget(btn_ok)
+        layout.addLayout(btn_row)
+
+        def apply_filter(text: str):
+            keyword = (text or "").strip().lower()
+            for i in range(list_widget.count()):
+                item = list_widget.item(i)
+                visible = not keyword or keyword in item.text().lower()
+                item.setHidden(not visible)
+
+        search_edit.textChanged.connect(apply_filter)
+
+        def accept_selection():
+            item = list_widget.currentItem()
+            if not item:
+                QMessageBox.information(dlg, "提示", "请先选择一个规则。")
+                return
+            rid = item.data(Qt.ItemDataRole.UserRole)
+            self.set_current_rule(rid)
+            dlg.accept()
+
+        btn_ok.clicked.connect(accept_selection)
+        btn_cancel.clicked.connect(dlg.reject)
+        list_widget.itemDoubleClicked.connect(lambda _item: accept_selection())
+
+        dlg.exec()
 
     def display_result(self, result, file_path):
         self.result_text.clear()
