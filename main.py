@@ -14,6 +14,7 @@ import webbrowser
 
 from version import __version__
 from update_checker import check_update, download_file
+from remote_rules import run_remote_rules_dialog
 
 # 添加当前目录到系统路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -282,8 +283,14 @@ class ExcelProcessingApp(QMainWindow):
         root_layout.addWidget(splitter, 1)
 
     def _setup_menu(self):
-        """菜单栏：帮助 -> 检查更新、关于"""
+        """菜单栏：规则 -> 从远程获取规则；帮助 -> 检查更新、关于"""
         menubar = self.menuBar()
+
+        rule_menu = menubar.addMenu("规则")
+        act_remote = QAction("从远程获取规则", self)
+        act_remote.triggered.connect(self.on_remote_rules)
+        rule_menu.addAction(act_remote)
+
         help_menu = menubar.addMenu("帮助")
         act_update = QAction("检查更新", self)
         act_update.triggered.connect(self.on_check_update)
@@ -336,6 +343,26 @@ class ExcelProcessingApp(QMainWindow):
             if rule_info.get("template") == template_name:
                 return rule_id
         return None
+
+    def on_remote_rules(self):
+        """打开「从远程获取规则」对话框"""
+        # 重新加载一次配置，确保用户手动修改 config.yaml 后能立即生效
+        self.load_config()
+        styles = {
+            "COLORS": COLORS,
+            "FONT_FAMILY": FONT_FAMILY,
+            "BUTTON_STYLE_PRIMARY": BUTTON_STYLE_PRIMARY,
+            "BUTTON_STYLE_SECONDARY": BUTTON_STYLE_SECONDARY,
+        }
+        run_remote_rules_dialog(
+            self,
+            get_config=lambda: self.config,
+            save_config=self.save_config,
+            refresh_rule_list=self.update_rule_list,
+            styles=styles,
+            rules_dir=self.rules_dir,
+            templates_dir=self.templates_dir,
+        )
 
     def on_check_update(self):
         """检查更新"""

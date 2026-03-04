@@ -1,0 +1,29 @@
+{
+  "base_url": "https://raw.githubusercontent.com/你的用户名/规则仓库/main/rules",
+  "rules": [
+    {
+      "rule_id": "canteen_deduction_rules",
+      "display_name": "食堂扣缴规则",
+      "description": "处理食堂消费与打卡，计算扣缴与汇总",
+      "version": "1.0",
+      "files": [
+        { "path": "canteen_deduction_rules.py", "target": "rules" },
+        { "path": "canteen_deduction_rules.md", "target": "rules" },
+        { "path": "食堂扣缴.xlsx", "target": "templates" }
+      ],
+      "template": "食堂扣缴.xlsx"
+    },
+    {
+      "rule_id": "continuous_work_rule",
+      "display_name": "连续工作超时检测",
+      "description": "检测连续工作超过6天的记录并标红",
+      "version": "1.0",
+      "files": [
+        { "path": "continuous_work_rule.py", "target": "rules" },
+        { "path": "continuous_work_rule.md", "target": "rules" },
+        { "path": "工作超6天查找.xlsx", "target": "templates" }
+      ],
+      "template": "工作超6天查找.xlsx"
+    }
+  ]
+}
