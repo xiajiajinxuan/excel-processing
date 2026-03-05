@@ -4,6 +4,7 @@ import importlib
 import pandas as pd
 from pathlib import Path
 import sys
+import time
 import traceback
 import shutil
 import yaml
@@ -11,6 +12,7 @@ import subprocess
 import tempfile
 import threading
 import webbrowser
+from datetime import datetime
 
 from version import __version__
 from update_checker import check_update, download_file
@@ -41,7 +43,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QColor
 
 # ---------- 新 UI 设计系统（瑞士现代 + 生产力工具配色）----------
 # 主色：青绿 #0D9488；CTA：橙色 #F97316；背景：浅青白 #F0FDFA；文字：深青 #134E4A
@@ -252,13 +254,13 @@ class ExcelProcessingApp(QMainWindow):
         btn_download.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_download.setFixedHeight(36)
         btn_download.clicked.connect(self.download_template)
-        btn_process = QPushButton("处理数据")
-        btn_process.setStyleSheet(BUTTON_STYLE_PRIMARY)
-        btn_process.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_process.setFixedHeight(36)
-        btn_process.clicked.connect(self.process_data)
+        self.btn_process = QPushButton("处理数据")
+        self.btn_process.setStyleSheet(BUTTON_STYLE_PRIMARY)
+        self.btn_process.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_process.setFixedHeight(36)
+        self.btn_process.clicked.connect(self.process_data)
         btn_row.addWidget(btn_download)
-        btn_row.addWidget(btn_process)
+        btn_row.addWidget(self.btn_process)
         btn_row.addStretch()
         wf_layout.addLayout(btn_row)
 
@@ -304,6 +306,11 @@ class ExcelProcessingApp(QMainWindow):
         act_update = QAction("检查更新", self)
         act_update.triggered.connect(self.on_check_update)
         help_menu.addAction(act_update)
+
+        act_log_dir = QAction("打开日志目录", self)
+        act_log_dir.triggered.connect(self.on_open_log_dir)
+        help_menu.addAction(act_log_dir)
+
         act_about = QAction("关于", self)
         act_about.triggered.connect(self.show_about)
         help_menu.addAction(act_about)
@@ -331,6 +338,11 @@ class ExcelProcessingApp(QMainWindow):
                     },
                     "default_rule": "example_rule",
                 }
+
+        # 兼容旧配置：确保存在 log 配置块
+        log_cfg = self.config.setdefault("log", {})
+        log_cfg.setdefault("to_file", False)
+        log_cfg.setdefault("dir", "output")
 
     def save_config(self):
         """保存 YAML 配置"""
@@ -372,6 +384,15 @@ class ExcelProcessingApp(QMainWindow):
             rules_dir=self.rules_dir,
             templates_dir=self.templates_dir,
         )
+
+    def on_open_log_dir(self):
+        """打开日志所在目录（若未启用写文件也创建目录）。"""
+        log_dir = Path(self.config.get("log", {}).get("dir", "output")).resolve()
+        log_dir.mkdir(parents=True, exist_ok=True)
+        if sys.platform == "win32":
+            os.startfile(str(log_dir))
+        else:
+            subprocess.run(["xdg-open", str(log_dir)], check=False)
 
     def on_check_update(self):
         """检查更新"""
@@ -567,16 +588,33 @@ del /f /q "%~f0" 2>nul
             QMessageBox.critical(self, "错误", "请选择处理规则")
             return
         rule_id = self.current_rule_id
+
+        # 按钮状态与初始日志
+        self.btn_process.setText("处理中")
+        self.btn_process.setEnabled(False)
+        QApplication.processEvents()
+
+        self.result_text.clear()
+        self.log("——— 开始新任务 ———", live=True, timestamp=True)
+
+        elapsed = None
         try:
+            start = time.perf_counter()
+            self.log("正在读取文件…", live=True)
             rule_module = importlib.import_module(f"rules.{rule_id}")
             data_df = pd.read_excel(file_path)
+            self.log("已读取，正在执行规则…", live=True)
             result = rule_module.process(data_df, excel_file=file_path)
-            self.display_result(result, file_path)
+            elapsed = time.perf_counter() - start
+            self.log("规则执行完成，正在写入 Excel…", live=True)
+            self.display_result(result, file_path, elapsed)
         except Exception as e:
-            error_message = f"处理数据时出错: {str(e)}\n{traceback.format_exc()}"
-            QMessageBox.critical(self, "错误", error_message)
-            self.result_text.clear()
-            self.result_text.setPlainText(error_message)
+            error_full = f"处理数据时出错: {str(e)}\n{traceback.format_exc()}"
+            QMessageBox.critical(self, "错误", error_full)
+            self.log(f"处理数据时出错: {str(e)}", level="error", live=True)
+        finally:
+            self.btn_process.setText("处理数据")
+            self.btn_process.setEnabled(True)
 
     def open_rule_picker(self):
         """弹窗选择本地已安装的处理规则，支持简单搜索。"""
@@ -646,12 +684,12 @@ del /f /q "%~f0" 2>nul
 
         dlg.exec()
 
-    def display_result(self, result, file_path):
-        self.result_text.clear()
+    def display_result(self, result, file_path, elapsed=None):
         if isinstance(result, dict) and "error" in result:
-            self.result_text.setPlainText(f"错误: {result['error']}\n")
+            self.log(f"错误: {result['error']}", level="error", live=True)
             return
-        self.result_text.append("处理完成！\n")
+
+        self.log("处理完成！", live=True)
         file_name = os.path.basename(file_path)
         base_name = os.path.splitext(file_name)[0]
         output_file = self.output_dir / f"{base_name}_processed.xlsx"
@@ -666,24 +704,26 @@ del /f /q "%~f0" 2>nul
             with pd.ExcelWriter(output_file, engine="openpyxl") as writer:
                 for sheet_name, df in original_dfs.items():
                     df.to_excel(writer, sheet_name=sheet_name, index=False)
-                    self.result_text.append(f"已保留原始工作表: {sheet_name}\n")
+                    self.log(f"已保留原始工作表: {sheet_name}", live=True)
                 sheet_mapping = {"deduction_record": "扣缴记录", "monthly_summary": "月度汇总"}
                 if isinstance(result, dict):
                     for key, value in result.items():
                         if isinstance(value, pd.DataFrame) and not value.empty and key != "error":
                             sheet_name = sheet_mapping.get(key, key)
                             value.to_excel(writer, sheet_name=sheet_name, index=False)
-                            self.result_text.append(f"已创建工作表: {sheet_name}，包含 {len(value)} 行数据\n")
+                            self.log(f"已创建工作表: {sheet_name}，包含 {len(value)} 行数据", live=True)
                 elif isinstance(result, pd.DataFrame):
                     result.to_excel(writer, sheet_name="结果", index=False)
-                    self.result_text.append(f"已创建工作表: 结果，包含 {len(result)} 行数据\n")
-            self.result_text.append(f"\n结果已保存到: {output_file}")
+                    self.log(f"已创建工作表: 结果，包含 {len(result)} 行数据", live=True)
+            if elapsed is not None:
+                self.log(f"处理耗时: {elapsed:.2f} 秒", live=True)
+            self.log(f"结果已保存到: {output_file}", live=True)
             if QMessageBox.question(self, "处理完成", f"结果已保存到: {output_file}\n是否打开文件？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes) == QMessageBox.StandardButton.Yes:
                 os.startfile(output_file)
         except Exception as e:
-            error_message = f"保存结果时出错: {str(e)}\n{traceback.format_exc()}"
-            QMessageBox.critical(self, "错误", error_message)
-            self.result_text.setPlainText(error_message)
+            error_full = f"保存结果时出错: {str(e)}\n{traceback.format_exc()}"
+            QMessageBox.critical(self, "错误", error_full)
+            self.log(f"保存结果时出错: {str(e)}", level="error", live=True)
 
     def load_rules(self):
         self.available_rules = []
@@ -724,12 +764,64 @@ def get_rule_info():
             df.to_excel(example_template_path, index=False)
         self.log("已创建示例规则文件和模板")
 
-    def log(self, message):
-        from datetime import datetime
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.result_text.append(f"[{ts}] {message}\n")
+    def _get_log_path(self) -> Path:
+        """返回日志文件路径（按配置的 log.dir）。"""
+        log_dir = Path(self.config.get("log", {}).get("dir", "output"))
+        return log_dir / "app.log"
+
+    def _write_log_file(self, message: str, level: str = "info") -> None:
+        """将一行日志写入文件（始终带时间戳与级别前缀）。"""
+        if not self.config.get("log", {}).get("to_file", False):
+            return
+        log_path = self._get_log_path()
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            prefix = ""
+            if level == "warning":
+                prefix = "[警告] "
+            elif level == "error":
+                prefix = "[错误] "
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(f"[{ts}] {prefix}{message}\n")
+        except Exception:
+            # 文件写入失败不影响界面日志
+            pass
+
+    def log(self, message: str, level: str = "info", live: bool = False, timestamp: bool | None = None) -> None:
+        """
+        统一日志入口：追加到运行日志区，可选级别、实时刷新、时间戳和写文件。
+        level: "info" / "warning" / "error"
+        live: True 时立即刷新界面并滚动到底部。
+        timestamp: None 时 live 日志不带时间戳，非 live 带时间戳。
+        """
+        if timestamp is None:
+            timestamp = not live
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if timestamp else ""
+        prefix = f"[{ts}] " if ts else ""
+        if level == "warning":
+            prefix += "[警告] "
+        elif level == "error":
+            prefix += "[错误] "
+
+        # 界面输出（带简单颜色）
+        color = QColor(COLORS["text"])
+        if level == "error":
+            color = QColor("#c0392b")
+        elif level == "warning":
+            color = QColor("#d97706")
+
+        self.result_text.setTextColor(color)
+        self.result_text.append(f"{prefix}{message}")
+        self.result_text.setTextColor(QColor(COLORS["text"]))
+
+        if live:
+            QApplication.processEvents()
         scrollbar = self.result_text.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
+
+        # 文件输出
+        self._write_log_file(message, level=level)
 
     def show_about(self):
         QMessageBox.about(
