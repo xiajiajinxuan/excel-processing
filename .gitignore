@@ -148,3 +148,5 @@ htmlcov/
 
 # Git manager
 .git_manager/
+
+templates/

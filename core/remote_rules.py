@@ -10,7 +10,7 @@ import urllib.request
 import ssl
 from pathlib import Path
 
-from update_checker import download_file as _download_file
+from core.update_checker import download_file as _download_file
 
 
 def fetch_manifest(manifest_url, timeout=15):
@@ -256,7 +256,7 @@ def run_remote_rules_dialog(parent, get_config, save_config, refresh_rule_list, 
                 QMessageBox.information(
                     self,
                     "提示",
-                    "请在 config.yaml 中配置 rules_remote.manifest_url 后重试。",
+                    "请在「设置」->「编辑配置文件」中配置 rules_remote.manifest_url 后重试。",
                 )
                 return
             self._status_label.setText("正在获取清单…")

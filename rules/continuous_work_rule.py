@@ -19,9 +19,9 @@ def process(data_df, **kwargs):
     if not excel_file:
         raise ValueError("未提供Excel文件路径")
 
-    # 获取项目根目录
+    # 获取项目根目录，配置文件位于 config/config.yaml
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    config_path = os.path.join(project_root, 'config.yaml')
+    config_path = os.path.join(project_root, 'config', 'config.yaml')
     with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
     

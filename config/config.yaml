@@ -11,7 +11,7 @@ rules:
     template: 工作超6天查找.xlsx
   pinyin_abbreviation_rules:
     display_name: 拼音首写转换
-    template: ''
+    template: 拼音首写转换模版.xlsx
 rules_remote:
   manifest_url: https://raw.githubusercontent.com/xiajiajinxuan/excel-processing/rules/rules_manifest.json
   timeout: 15

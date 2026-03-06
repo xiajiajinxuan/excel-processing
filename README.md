@@ -53,42 +53,56 @@ Excel数据处理工具是一个功能强大的桌面应用程序，旨在简化
 
 ```
 120_EXCEL_PROCESSING/
-├── main.py                      # 主应用程序入口
-├── config.yaml                  # 配置文件（规则和模板映射）
-├── requirements.txt             # Python依赖包列表
-├── excel_tool.spec              # PyInstaller打包配置文件
-├── build.bat                    # Windows批处理脚本（一键打包）
-├── build.ps1                    # PowerShell脚本（一键打包）
+├── main.py                      # 程序入口（仅启动应用）
+├── version.py                   # 版本号
+├── requirements.txt             # Python 依赖列表
+├── excel_tool.spec              # PyInstaller 打包配置
+├── rules_manifest.example.json  # 远程规则清单示例
 │
-├── rules/                       # 处理规则模块目录
-│   ├── __init__.py              # 规则包初始化文件
-│   ├── canteen_deduction_rules.py    # 食堂扣缴规则
-│   └── continuous_work_rule.py       # 连续工作超时检测规则
+├── app/                         # 应用层包
+│   ├── theme.py                 # UI 主题与样式
+│   ├── config_loader.py         # 配置与路径加载
+│   ├── processor.py             # 规则执行与结果写入（与 GUI 解耦）
+│   ├── config_editor.py         # 设置对话框
+│   └── main_window.py           # 主窗口
 │
-├── templates/                   # Excel模板文件目录
-│   ├── 食堂扣缴.xlsx            # 食堂扣缴规则模板
-│   └── 工作超6天查找.xlsx       # 连续工作检测规则模板
+├── core/                        # 通用能力包（与 Excel 业务解耦）
+│   ├── update_checker.py        # 检查更新（GitHub/Gitee Releases）
+│   └── remote_rules.py          # 远程规则获取与安装
 │
+├── config/                      # 配置目录
+│   └── config.yaml              # 规则与模板映射等配置
+│
+├── rules/                       # 处理规则模块
+│   ├── canteen_deduction_rules.py
+│   ├── continuous_work_rule.py
+│   ├── pinyin_abbreviation_rules.py
+│   └── *.md                     # 规则说明文档
+│
+├── templates/                   # Excel 模板目录
 ├── output/                      # 处理结果输出目录
-│   └── *_processed.xlsx         # 处理后的Excel文件
-│
-├── assets/                      # 资源文件目录
-│   └── icon.ico                 # 应用程序图标
-│
-├── build/                       # PyInstaller构建临时文件
-├── dist/                        # 打包后的可执行文件目录
-│   └── Excel数据处理工具.exe    # 打包后的可执行文件
-│
-└── venv/                        # Python虚拟环境（不纳入版本控制）
+├── assets/                      # 资源文件（见 assets/README.md）
+│   └── icons/                   # 应用图标（icon.ico）
+├── scripts/                     # 构建与运维脚本（见 scripts/README.md）
+│   ├── build_exe.py
+│   ├── build.bat
+│   └── build.ps1
+├── tests/                       # 单元测试（config_loader、processor）
+├── build/                       # PyInstaller 构建临时文件
+├── dist/                        # 打包后的 exe
+└── venv/                        # 虚拟环境（不纳入版本控制）
 ```
 
 ### 目录说明
 
-- **main.py**：主程序文件，包含GUI界面和核心业务逻辑
-- **rules/**：处理规则模块目录，每个规则是一个独立的Python模块
-- **templates/**：Excel模板文件目录，存放各规则对应的模板文件
-- **output/**：处理结果输出目录，所有处理后的文件保存在此
-- **config.yaml**：配置文件，定义规则的显示名称和模板映射关系
+- **main.py**：仅负责创建 QApplication、设置样式并启动主窗口。
+- **app/**：应用层逻辑（主题、配置、规则执行、设置对话框、主窗口）。
+- **core/**：通用能力（检查更新、远程规则），与 Excel 业务解耦。
+- **config/**：配置文件目录，主配置为 `config/config.yaml`。
+- **rules/**：处理规则模块，每个规则为独立 .py 模块，可配对应 .md 说明。
+- **templates/**：各规则对应的 Excel 模板。
+- **output/**：处理结果输出目录。
+- **tests/**：对 `app.config_loader`、`app.processor` 的单元测试，运行：`python -m unittest discover -s tests -v`。
 
 ## 🏗️ 架构设计
 
@@ -849,7 +863,7 @@ python -m PyInstaller excel_tool.spec --clean
 - **隐藏导入**：
   - pandas, numpy, openpyxl, yaml
 
-- **图标**：`assets/icon.ico`
+- **图标**：`assets/icons/icon.ico`
 
 - **控制台**：设置为False（隐藏控制台窗口）
 
