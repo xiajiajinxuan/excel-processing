@@ -122,6 +122,7 @@ dmypy.json
 output/
 *.xlsx
 !templates/*.xlsx
+!rules/*/doc/template/*.xlsx
 
 # Temporary files and logs
 *.log

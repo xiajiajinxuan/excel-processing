@@ -19,9 +19,9 @@ def process(data_df, **kwargs):
     if not excel_file:
         raise ValueError("未提供Excel文件路径")
 
-    # 获取项目根目录
-    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    config_path = os.path.join(project_root, 'config.yaml')
+    # 获取项目根目录，配置文件位于 config/config.yaml
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    config_path = os.path.join(project_root, 'config', 'config.yaml')
     with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
     
@@ -35,9 +35,9 @@ def process(data_df, **kwargs):
     if not template_name:
         raise ValueError("未找到对应的模板文件配置")
 
-    # 获取模板文件路径
-    template_dir = os.path.join(os.path.dirname(os.path.dirname(excel_file)), 'templates')
-    template_file = os.path.join(template_dir, template_name)
+    # 模板路径：规则目录下的 doc/template/<模板名>
+    rule_dir = os.path.dirname(__file__)
+    template_file = os.path.join(rule_dir, 'doc', 'template', template_name)
 
     if not os.path.exists(template_file):
         raise ValueError(f"模板文件不存在: {template_file}")
@@ -130,4 +130,4 @@ def get_rule_info():
         "description": "检测连续工作超过6天的记录并标记对应单元格为红色",
         "version": "1.0",
         "author": "System"
-    } 
+    }
