@@ -105,9 +105,13 @@ def fetch_manifest(manifest_url, timeout=15, source="remote"):
             if data is None:
                 return None, f"清单格式错误：{e}"
         manifest_dir = str(manifest_path.parent.resolve())
-        base_url = (data.get("base_url") or "").strip().rstrip("/") or manifest_dir
-        if not base_url or _is_remote_url(base_url):
+        raw_base = (data.get("base_url") or "").strip().rstrip("/") or manifest_dir
+        if not raw_base or _is_remote_url(raw_base):
             base_url = manifest_dir
+        elif Path(raw_base).is_absolute():
+            base_url = raw_base
+        else:
+            base_url = str((manifest_path.parent / raw_base).resolve())
         rules = data.get("rules")
         if not isinstance(rules, list):
             return None, "清单格式错误：缺少 rules 数组"
@@ -428,7 +432,7 @@ def run_remote_rules_dialog(parent, get_config, save_config, refresh_rule_list, 
             for row, r in enumerate(rules):
                 rule_id = r.get("rule_id") or ""
                 display_name = r.get("display_name") or rule_id
-                desc = (r.get("description") or "")[:80]
+                desc = (r.get("description") or r.get("display_name") or "")[:80]
                 installed = rule_id in self._local_ids
                 status = "已安装" if installed else "未安装"
 

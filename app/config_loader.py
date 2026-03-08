@@ -16,7 +16,7 @@ _DEFAULT_CONFIG = {
         "example_rule": {"display_name": "示例规则", "template": "example_template.xlsx"}
     },
     "default_rule": "example_rule",
-    "log": {"to_file": False, "dir": "output"},
+    "log": {"to_file": True, "dir": "output"},
 }
 
 
@@ -50,7 +50,7 @@ def load_config(base_path: Path | None = None) -> dict[str, Any]:
 
     # 兼容旧配置：确保存在 log 配置块
     log_cfg = data.setdefault("log", {})
-    log_cfg.setdefault("to_file", False)
+    log_cfg.setdefault("to_file", True)
     log_cfg.setdefault("dir", "output")
     return data
 

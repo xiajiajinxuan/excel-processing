@@ -213,7 +213,7 @@ class ConfigEditorDialog(QDialog):
             self.default_rule_combo.setCurrentIndex(0)
 
         log_cfg = self.config.get("log") or {}
-        self.log_to_file_check.setChecked(bool(log_cfg.get("to_file", False)))
+        self.log_to_file_check.setChecked(bool(log_cfg.get("to_file", True)))
         self.log_dir_edit.setText(str(log_cfg.get("dir", "output")).strip())
 
         self.rules_table.setRowCount(len(rules))

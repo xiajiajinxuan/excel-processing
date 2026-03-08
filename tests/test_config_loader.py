@@ -24,7 +24,7 @@ class TestConfigLoader(unittest.TestCase):
             self.assertIn("rules", config)
             self.assertIn("default_rule", config)
             self.assertIn("log", config)
-            self.assertFalse(config["log"].get("to_file"))
+            self.assertTrue(config["log"].get("to_file"))
             self.assertEqual(config["log"].get("dir"), "output")
 
     def test_load_config_reads_existing_yaml(self):

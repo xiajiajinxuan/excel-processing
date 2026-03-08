@@ -1,7 +1,7 @@
 default_rule: continuous_work_rule
 log:
   dir: output
-  to_file: false
+  to_file: true
 rules:
   canteen_deduction_rules:
     display_name: 食堂扣缴规则

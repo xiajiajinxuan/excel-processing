@@ -34,8 +34,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QAction, QColor
+from PyQt6.QtCore import Qt, QTimer, QUrl
+from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon
 
 from version import __version__
 from core.update_checker import check_update, download_file
@@ -249,6 +249,12 @@ class ExcelProcessingApp(QMainWindow):
         act_log_dir = QAction("打开日志目录", self)
         act_log_dir.triggered.connect(self.on_open_log_dir)
         help_menu.addAction(act_log_dir)
+        _github_icon_path = self._github_icon_path()
+        act_github = QAction("GitHub", self)
+        if _github_icon_path is not None:
+            act_github.setIcon(QIcon(str(_github_icon_path)))
+        act_github.triggered.connect(self.on_open_github)
+        help_menu.addAction(act_github)
         act_about = QAction("关于", self)
         act_about.triggered.connect(self.show_about)
         help_menu.addAction(act_about)
@@ -324,6 +330,18 @@ class ExcelProcessingApp(QMainWindow):
             os.startfile(str(log_dir))
         else:
             subprocess.run(["xdg-open", str(log_dir)], check=False)
+
+    def _github_icon_path(self) -> Path | None:
+        """返回 GitHub 图标路径（若存在），否则返回 None。"""
+        base = getattr(sys, "frozen", False) and Path(sys.executable).parent or Path(__file__).resolve().parent.parent
+        for name in ("github.png", "github.ico"):
+            p = base / "assets" / "icons" / name
+            if p.exists():
+                return p
+        return None
+
+    def on_open_github(self):
+        QDesktopServices.openUrl(QUrl("https://github.com/xiajiajinxuan/excel-processing"))
 
     def on_check_update(self):
         result = check_update(self.config, __version__)
@@ -681,7 +699,7 @@ def get_rule_info():
         return Path(self.config.get("log", {}).get("dir", "output")) / "app.log"
 
     def _write_log_file(self, message: str, level: str = "info") -> None:
-        if not self.config.get("log", {}).get("to_file", False):
+        if not self.config.get("log", {}).get("to_file", True):
             return
         log_path = self._get_log_path()
         try:
@@ -723,5 +741,5 @@ def get_rule_info():
     def show_about(self):
         QMessageBox.about(
             self, "关于",
-            f"Excel数据处理工具\n\n版本：v{__version__}\n\n基于 Python 与 PyQt6 的桌面应用，支持插件式规则与模板管理。",
+            f"Excel数据处理工具\n\n版本：v{__version__}\n\n基于 Python 与 PyQt6 的桌面应用，支持插件式规则与模板管理。\n\n项目地址：https://github.com/xiajiajinxuan/excel-processing",
         )
