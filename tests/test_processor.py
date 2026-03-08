@@ -20,15 +20,18 @@ class TestProcessor(unittest.TestCase):
             rules_dir = Path(tmp)
             self.assertEqual(list_rule_ids(rules_dir), [])
 
-    def test_list_rule_ids_ignores_init(self):
-        """应忽略 __init__.py。"""
+    def test_list_rule_ids_subdir_only(self):
+        """仅识别子目录形式 <name>/<name>.py，不识别顶层 .py。"""
         with tempfile.TemporaryDirectory() as tmp:
             rules_dir = Path(tmp)
-            (rules_dir / "__init__.py").write_text("", encoding="utf-8")
-            (rules_dir / "foo_rule.py").write_text("# rule", encoding="utf-8")
+            (rules_dir / "foo_rule" / "foo_rule.py").parent.mkdir(parents=True, exist_ok=True)
+            (rules_dir / "foo_rule" / "foo_rule.py").write_text("# rule", encoding="utf-8")
             ids = list_rule_ids(rules_dir)
             self.assertIn("foo_rule", ids)
-            self.assertNotIn("__init__", ids)
+            (rules_dir / "flat_rule.py").write_text("# flat", encoding="utf-8")
+            ids2 = list_rule_ids(rules_dir)
+            self.assertIn("foo_rule", ids2)
+            self.assertNotIn("flat_rule", ids2)
 
     def test_write_result_to_excel_dataframe(self):
         """DataFrame 结果应写入「结果」工作表并保留原表。"""

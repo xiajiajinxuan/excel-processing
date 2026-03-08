@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """规则执行与结果写入：加载规则模块、执行 process、写入 Excel。与 GUI 解耦，便于单测。"""
 
-import importlib
+import importlib.util
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -16,10 +17,23 @@ def run_rule(
 ) -> tuple[Any, float | None] | tuple[None, str]:
     """
     执行指定规则处理 Excel 文件。
+    规则模块从 rules_dir / rule_id / rule_id.py 加载。
     :return: 成功时 (result, elapsed_seconds)，失败时 (None, error_message)。
     """
+    rules_dir = Path(rules_dir)
+    rule_py = rules_dir / rule_id / f"{rule_id}.py"
+    if not rule_py.exists():
+        return None, f"规则模块不存在: {rule_py}"
+
     try:
-        rule_module = importlib.import_module(f"rules.{rule_id}")
+        spec = importlib.util.spec_from_file_location(
+            f"_rule_{rule_id}", rule_py, submodule_search_locations=[str(rules_dir / rule_id)]
+        )
+        if spec is None or spec.loader is None:
+            return None, "加载规则模块失败: 无法创建 spec"
+        rule_module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = rule_module
+        spec.loader.exec_module(rule_module)
     except Exception as e:
         return None, f"加载规则模块失败: {e}"
 
@@ -81,8 +95,25 @@ def write_result_to_excel(
 
 
 def list_rule_ids(rules_dir: Path) -> list[str]:
-    """列出 rules 目录下所有规则模块名（不含 __init__）。"""
+    """列出 rules 目录下所有规则 ID（仅子目录形式：rules_dir/<name>/<name>.py）。"""
     rules_dir = Path(rules_dir)
     if not rules_dir.exists():
         return []
-    return [f.stem for f in rules_dir.glob("*.py") if f.stem != "__init__"]
+    ids = []
+    for sub in rules_dir.iterdir():
+        if sub.is_dir() and not sub.name.startswith("."):
+            py_file = sub / f"{sub.name}.py"
+            if py_file.exists():
+                ids.append(sub.name)
+    return sorted(ids)
+
+
+def get_default_template_for_rule(rules_dir: Path, rule_id: str) -> str | None:
+    """返回规则 doc/template 目录下第一个 .xlsx 文件名，若无则返回 None。"""
+    template_dir = Path(rules_dir) / rule_id / "doc" / "template"
+    if not template_dir.is_dir():
+        return None
+    for p in sorted(template_dir.iterdir()):
+        if p.is_file() and p.suffix.lower() == ".xlsx":
+            return p.name
+    return None

@@ -3,11 +3,15 @@
 
 from pathlib import Path
 
+# 设为 True 时隐藏设置中的「更新检查」选项卡，恢复时改回 False
+HIDE_UPDATE_CHECK = True
+
 import yaml
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -121,12 +125,25 @@ class ConfigEditorDialog(QDialog):
         # ---------- 远程规则 ----------
         remote_w = QWidget()
         remote_layout = QVBoxLayout(remote_w)
+        r0 = QHBoxLayout()
+        r0.addWidget(self._make_label("规则清单来源"))
+        self.rules_source_combo = QComboBox()
+        self.rules_source_combo.addItem("远程", "remote")
+        self.rules_source_combo.addItem("本地", "local")
+        self.rules_source_combo.setStyleSheet(self.input_style)
+        self.rules_source_combo.currentIndexChanged.connect(self._on_rules_source_changed)
+        r0.addWidget(self.rules_source_combo, 1)
+        remote_layout.addLayout(r0)
         r1 = QHBoxLayout()
         r1.addWidget(self._make_label("清单地址"))
         self.manifest_url_edit = QLineEdit()
         self.manifest_url_edit.setPlaceholderText("rules_manifest.json 的 URL")
         self.manifest_url_edit.setStyleSheet(self.input_style)
         r1.addWidget(self.manifest_url_edit, 1)
+        self.manifest_browse_btn = QPushButton("浏览…")
+        self.manifest_browse_btn.setStyleSheet(self.btn_secondary_style)
+        self.manifest_browse_btn.clicked.connect(self._on_manifest_browse)
+        r1.addWidget(self.manifest_browse_btn)
         remote_layout.addLayout(r1)
         r2 = QHBoxLayout()
         r2.addWidget(self._make_label("超时(秒)"))
@@ -137,35 +154,36 @@ class ConfigEditorDialog(QDialog):
         remote_layout.addStretch()
         tabs.addTab(remote_w, "远程规则")
 
-        # ---------- 更新检查 ----------
-        update_w = QWidget()
-        update_layout = QVBoxLayout(update_w)
-        u1 = QHBoxLayout()
-        self.update_enabled_check = QCheckBox("启用检查更新")
-        self.update_enabled_check.setStyleSheet(f"font-family: {self.font_family}; color: {self.colors['text']};")
-        u1.addWidget(self.update_enabled_check)
-        update_layout.addLayout(u1)
-        u2 = QHBoxLayout()
-        u2.addWidget(self._make_label("GitHub 用户名"))
-        self.update_owner_edit = QLineEdit()
-        self.update_owner_edit.setStyleSheet(self.input_style)
-        u2.addWidget(self.update_owner_edit, 1)
-        update_layout.addLayout(u2)
-        u3 = QHBoxLayout()
-        u3.addWidget(self._make_label("仓库名"))
-        self.update_repo_edit = QLineEdit()
-        self.update_repo_edit.setStyleSheet(self.input_style)
-        u3.addWidget(self.update_repo_edit, 1)
-        update_layout.addLayout(u3)
-        u4 = QHBoxLayout()
-        u4.addWidget(self._make_label("来源"))
-        self.update_source_edit = QLineEdit()
-        self.update_source_edit.setPlaceholderText("例如：github")
-        self.update_source_edit.setStyleSheet(self.input_style)
-        u4.addWidget(self.update_source_edit, 1)
-        update_layout.addLayout(u4)
-        update_layout.addStretch()
-        tabs.addTab(update_w, "更新检查")
+        if not HIDE_UPDATE_CHECK:
+            # ---------- 更新检查 ----------
+            update_w = QWidget()
+            update_layout = QVBoxLayout(update_w)
+            u1 = QHBoxLayout()
+            self.update_enabled_check = QCheckBox("启用检查更新")
+            self.update_enabled_check.setStyleSheet(f"font-family: {self.font_family}; color: {self.colors['text']};")
+            u1.addWidget(self.update_enabled_check)
+            update_layout.addLayout(u1)
+            u2 = QHBoxLayout()
+            u2.addWidget(self._make_label("GitHub 用户名"))
+            self.update_owner_edit = QLineEdit()
+            self.update_owner_edit.setStyleSheet(self.input_style)
+            u2.addWidget(self.update_owner_edit, 1)
+            update_layout.addLayout(u2)
+            u3 = QHBoxLayout()
+            u3.addWidget(self._make_label("仓库名"))
+            self.update_repo_edit = QLineEdit()
+            self.update_repo_edit.setStyleSheet(self.input_style)
+            u3.addWidget(self.update_repo_edit, 1)
+            update_layout.addLayout(u3)
+            u4 = QHBoxLayout()
+            u4.addWidget(self._make_label("来源"))
+            self.update_source_edit = QLineEdit()
+            self.update_source_edit.setPlaceholderText("例如：github")
+            self.update_source_edit.setStyleSheet(self.input_style)
+            u4.addWidget(self.update_source_edit, 1)
+            update_layout.addLayout(u4)
+            update_layout.addStretch()
+            tabs.addTab(update_w, "更新检查")
 
         layout.addWidget(tabs)
 
@@ -208,14 +226,22 @@ class ConfigEditorDialog(QDialog):
         self.rules_table.setColumnWidth(0, 160)
 
         remote = self.config.get("rules_remote") or {}
+        src = (remote.get("source") or "remote").strip().lower()
+        if src not in ("remote", "local"):
+            src = "remote"
+        idx = self.rules_source_combo.findData(src)
+        if idx >= 0:
+            self.rules_source_combo.setCurrentIndex(idx)
         self.manifest_url_edit.setText(str(remote.get("manifest_url", "")).strip())
         self.timeout_spin.setValue(int(remote.get("timeout") or 15))
+        self._on_rules_source_changed()
 
-        upd = self.config.get("update") or {}
-        self.update_enabled_check.setChecked(bool(upd.get("enabled", True)))
-        self.update_owner_edit.setText(str(upd.get("owner", "")).strip())
-        self.update_repo_edit.setText(str(upd.get("repo", "")).strip())
-        self.update_source_edit.setText(str(upd.get("source", "github")).strip())
+        if not HIDE_UPDATE_CHECK:
+            upd = self.config.get("update") or {}
+            self.update_enabled_check.setChecked(bool(upd.get("enabled", True)))
+            self.update_owner_edit.setText(str(upd.get("owner", "")).strip())
+            self.update_repo_edit.setText(str(upd.get("repo", "")).strip())
+            self.update_source_edit.setText(str(upd.get("source", "github")).strip())
 
     def _form_to_config(self):
         """从表单写回 self.config"""
@@ -239,14 +265,35 @@ class ConfigEditorDialog(QDialog):
 
         self.config.setdefault("rules_remote", {})
         self.config["rules_remote"]["manifest_url"] = self.manifest_url_edit.text().strip() or None
+        self.config["rules_remote"]["source"] = self.rules_source_combo.currentData() or "remote"
         self.config["rules_remote"]["timeout"] = self.timeout_spin.value()
 
-        self.config.setdefault("update", {})
-        self.config["update"]["enabled"] = self.update_enabled_check.isChecked()
-        self.config["update"]["owner"] = self.update_owner_edit.text().strip() or ""
-        self.config["update"]["repo"] = self.update_repo_edit.text().strip() or ""
-        self.config["update"]["source"] = self.update_source_edit.text().strip() or "github"
-        self.config["update"]["tag_prefix"] = self.config["update"].get("tag_prefix", "")
+        if not HIDE_UPDATE_CHECK:
+            self.config.setdefault("update", {})
+            self.config["update"]["enabled"] = self.update_enabled_check.isChecked()
+            self.config["update"]["owner"] = self.update_owner_edit.text().strip() or ""
+            self.config["update"]["repo"] = self.update_repo_edit.text().strip() or ""
+            self.config["update"]["source"] = self.update_source_edit.text().strip() or "github"
+            self.config["update"]["tag_prefix"] = self.config["update"].get("tag_prefix", "")
+
+    def _on_rules_source_changed(self):
+        """根据规则清单来源更新清单地址占位符与浏览按钮可见性。"""
+        is_local = (self.rules_source_combo.currentData() or "remote") == "local"
+        if is_local:
+            self.manifest_url_edit.setPlaceholderText("本地目录或 rules_manifest.json 的路径")
+            self.manifest_browse_btn.setVisible(True)
+        else:
+            self.manifest_url_edit.setPlaceholderText("rules_manifest.json 的 URL")
+            self.manifest_browse_btn.setVisible(False)
+
+    def _on_manifest_browse(self):
+        """选择本地目录（或先选 manifest 文件则用其所在目录），填入清单地址。"""
+        if (self.rules_source_combo.currentData() or "remote") != "local":
+            return
+        start = self.manifest_url_edit.text().strip() or ""
+        dir_path = QFileDialog.getExistingDirectory(self, "选择规则清单所在目录", start)
+        if dir_path:
+            self.manifest_url_edit.setText(dir_path)
 
     def _on_save(self):
         self._form_to_config()

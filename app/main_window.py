@@ -41,6 +41,9 @@ from version import __version__
 from core.update_checker import check_update, download_file
 from core.remote_rules import run_remote_rules_dialog
 
+# 设为 True 时隐藏「帮助-检查更新」菜单，恢复时改回 False
+HIDE_UPDATE_CHECK = True
+
 from app.theme import (
     COLORS,
     FONT_FAMILY,
@@ -50,7 +53,12 @@ from app.theme import (
     PANEL_STYLE,
 )
 from app.config_loader import load_config as load_config_data, get_project_paths
-from app.processor import run_rule as processor_run_rule, write_result_to_excel as processor_write_result
+from app.processor import (
+    get_default_template_for_rule,
+    list_rule_ids as processor_list_rule_ids,
+    run_rule as processor_run_rule,
+    write_result_to_excel as processor_write_result,
+)
 from app.config_editor import ConfigEditorDialog
 
 
@@ -223,6 +231,9 @@ class ExcelProcessingApp(QMainWindow):
         act_remote = QAction("从远程获取规则", self)
         act_remote.triggered.connect(self.on_remote_rules)
         rule_menu.addAction(act_remote)
+        act_sync_local = QAction("更新本地规则", self)
+        act_sync_local.triggered.connect(self.on_sync_local_rules)
+        rule_menu.addAction(act_sync_local)
         settings_menu = menubar.addMenu("设置")
         act_edit_config = QAction("编辑配置文件…", self)
         act_edit_config.triggered.connect(self.on_edit_config)
@@ -231,9 +242,10 @@ class ExcelProcessingApp(QMainWindow):
         act_show_config_dir.triggered.connect(self.on_show_config_dir)
         settings_menu.addAction(act_show_config_dir)
         help_menu = menubar.addMenu("帮助")
-        act_update = QAction("检查更新", self)
-        act_update.triggered.connect(self.on_check_update)
-        help_menu.addAction(act_update)
+        if not HIDE_UPDATE_CHECK:
+            act_update = QAction("检查更新", self)
+            act_update.triggered.connect(self.on_check_update)
+            help_menu.addAction(act_update)
         act_log_dir = QAction("打开日志目录", self)
         act_log_dir.triggered.connect(self.on_open_log_dir)
         help_menu.addAction(act_log_dir)
@@ -276,6 +288,10 @@ class ExcelProcessingApp(QMainWindow):
 
     def get_rule_template(self, rule_id):
         return self.config.get("rules", {}).get(rule_id, {}).get("template", "")
+
+    def _get_template_path(self, rule_id: str, template_name: str) -> Path:
+        """模板路径：rules_dir / rule_id / doc / template / template_name。"""
+        return self.rules_dir / rule_id / "doc" / "template" / template_name
 
     def get_rule_by_template(self, template_name):
         for rule_id, rule_info in self.config.get("rules", {}).items():
@@ -425,17 +441,11 @@ del /f /q "%~f0" 2>nul
             return False
 
     def update_rule_list(self):
+        """根据磁盘规则目录刷新规则列表与当前选中，不修改 config（同步由「更新本地规则」负责）。"""
         if not self.rules_dir.exists():
             self.rules_dir.mkdir(exist_ok=True)
-        rule_files = [f.stem for f in self.rules_dir.glob("*.py") if f.stem != "__init__"]
-        self.rule_ids = []
-        for rule_id in rule_files:
-            self.rule_ids.append(rule_id)
-            if rule_id not in self.config.get("rules", {}):
-                if "rules" not in self.config:
-                    self.config["rules"] = {}
-                self.config["rules"][rule_id] = {"display_name": rule_id, "template": f"{rule_id}_template.xlsx"}
-                self.save_config()
+        rule_ids_from_disk = processor_list_rule_ids(self.rules_dir)
+        self.rule_ids = list(rule_ids_from_disk)
         if self.current_rule_id in self.rule_ids:
             self.set_current_rule(self.current_rule_id)
         elif self.rule_ids:
@@ -443,6 +453,48 @@ del /f /q "%~f0" 2>nul
         else:
             self.current_rule_id = None
             self.rule_display.clear()
+
+    def sync_local_rules(self):
+        """对比 config 与 rules 目录：磁盘有而配置无则添加（display_name 取模板文件名），配置有而磁盘无则移除；保存并刷新列表。"""
+        self.load_config()
+        if "rules" not in self.config:
+            self.config["rules"] = {}
+        rules_dir = Path(self.rules_dir)
+        if not rules_dir.exists():
+            rules_dir.mkdir(parents=True, exist_ok=True)
+        disk_ids = set(processor_list_rule_ids(rules_dir))
+        config_rules = self.config["rules"]
+        added = 0
+        removed = 0
+        for rule_id in disk_ids:
+            if rule_id not in config_rules:
+                template_name = get_default_template_for_rule(rules_dir, rule_id)
+                if template_name:
+                    display_name = Path(template_name).stem
+                    template = template_name
+                else:
+                    display_name = rule_id
+                    template = f"{rule_id}_template.xlsx"
+                config_rules[rule_id] = {"display_name": display_name, "template": template}
+                added += 1
+        for rule_id in list(config_rules.keys()):
+            if rule_id not in disk_ids:
+                del config_rules[rule_id]
+                removed += 1
+        if added or removed:
+            self.save_config()
+        self.update_rule_list()
+        if added or removed:
+            QMessageBox.information(
+                self,
+                "更新本地规则",
+                f"已根据 rules 目录同步配置：新增 {added} 条，移除 {removed} 条。",
+            )
+        else:
+            QMessageBox.information(self, "更新本地规则", "配置已与 rules 目录一致。")
+
+    def on_sync_local_rules(self):
+        self.sync_local_rules()
 
     def set_current_rule(self, rule_id: str | None):
         if not rule_id or rule_id not in self.rule_ids:
@@ -470,7 +522,7 @@ del /f /q "%~f0" 2>nul
         if not template_name:
             QMessageBox.critical(self, "错误", f"规则 '{rule_id}' 没有对应的模板")
             return
-        template_path = self.templates_dir / template_name
+        template_path = self._get_template_path(rule_id, template_name)
         if not template_path.exists():
             QMessageBox.critical(self, "错误", f"模板文件 '{template_name}' 不存在")
             return
@@ -593,14 +645,12 @@ del /f /q "%~f0" 2>nul
         if not self.rules_dir.exists():
             self.rules_dir.mkdir(exist_ok=True)
             self.create_example_rule()
-        for file in self.rules_dir.glob("*.py"):
-            if file.name not in ("__init__.py",) and "__pycache__" not in file.name:
-                self.available_rules.append(file.stem)
+        self.available_rules = processor_list_rule_ids(self.rules_dir)
         self.update_rule_list()
         if self.available_rules:
             self.log(f"已加载 {len(self.available_rules)} 个处理规则")
         else:
-            self.log("未找到处理规则，请在 rules 目录下添加规则文件")
+            self.log("未找到处理规则，请在 rules 目录下按「规则ID/规则ID.py」子目录结构添加规则")
 
     def create_example_rule(self):
         init_path = self.rules_dir / "__init__.py"

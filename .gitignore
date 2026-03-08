@@ -150,3 +150,8 @@ htmlcov/
 .git_manager/
 
 templates/
+docs/
+
+# rules: 忽略除 __init__.py 外的所有文件
+rules/*
+!rules/__init__.py

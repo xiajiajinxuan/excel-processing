@@ -13,7 +13,7 @@ Excel数据处理工具是一个功能强大的桌面应用程序，旨在简化
 ### 主要特性
 
 - ✅ **插件式架构**：支持自定义处理规则，易于扩展
-- ✅ **模板管理**：提供Excel模板下载功能，确保数据格式统一
+- ✅ **模板管理**：每个规则自带模板（`rules/<rule_id>/doc/template/`），支持下载到本地使用
 - ✅ **多规则支持**：内置多种数据处理规则，满足不同业务场景
 - ✅ **结果保留**：处理结果保留原始工作表，新增处理结果工作表
 - ✅ **图形界面**：友好的GUI界面，操作简单直观
@@ -21,11 +21,12 @@ Excel数据处理工具是一个功能强大的桌面应用程序，旨在简化
 
 ### 核心功能
 
-1. **规则选择**：从下拉菜单中选择要应用的处理规则
-2. **模板下载**：下载对应规则的Excel模板文件
-3. **文件处理**：上传Excel数据文件，自动应用选定规则进行处理
-4. **结果生成**：生成处理后的Excel文件，保存在output目录
+1. **规则选择**：从下拉菜单中选择要应用的处理规则（规则来自 `rules/<rule_id>/` 子目录）
+2. **模板下载**：从对应规则的 `rules/<rule_id>/doc/template/` 下载 Excel 模板
+3. **文件处理**：上传 Excel 数据文件，自动应用选定规则进行处理
+4. **结果生成**：处理后的文件保存在 `output/` 目录（保留原表并新增结果表）
 5. **结果查看**：处理完成后可选择直接打开生成的文件
+6. **远程规则**（可选）：通过配置的规则清单（本地或远程）安装/更新规则到本地 `rules/`
 
 ## 🛠️ 技术栈
 
@@ -43,10 +44,11 @@ Excel数据处理工具是一个功能强大的桌面应用程序，旨在简化
 | 包名 | 版本 | 用途 |
 |------|------|------|
 | pandas | >=1.3.0 | 数据处理和分析 |
-| openpyxl | >=3.0.7 | Excel文件操作 |
+| openpyxl | >=3.0.7 | Excel 文件操作 |
 | numpy | ==1.24.3 | 数值计算支持 |
-| pyyaml | >=6.0 | YAML配置文件解析 |
+| pyyaml | >=6.0 | YAML 配置解析 |
 | PyQt6 | >=6.4.0 | GUI 界面 |
+| pypinyin | >=0.50.0 | 拼音相关（部分规则可选） |
 | pyinstaller | >=5.9.0 | 可执行文件打包 |
 
 ## 📁 项目结构
@@ -71,15 +73,18 @@ Excel数据处理工具是一个功能强大的桌面应用程序，旨在简化
 │   └── remote_rules.py          # 远程规则获取与安装
 │
 ├── config/                      # 配置目录
-│   └── config.yaml              # 规则与模板映射等配置
+│   └── config.yaml              # 规则与模板映射、远程规则、更新等配置
 │
-├── rules/                       # 处理规则模块
-│   ├── canteen_deduction_rules.py
-│   ├── continuous_work_rule.py
-│   ├── pinyin_abbreviation_rules.py
-│   └── *.md                     # 规则说明文档
+├── rules/                       # 处理规则（子目录结构，仅 __init__.py 纳入版本控制）
+│   ├── __init__.py
+│   ├── <rule_id>/               # 每个规则一个子目录，如 canteen_deduction_rules、continuous_work_rule
+│   │   ├── <rule_id>.py         # 规则逻辑入口
+│   │   └── doc/
+│   │       ├── template/        # 该规则对应的 Excel 模板
+│   │       │   └── *.xlsx
+│   │       └── readme.md        # 可选说明文档
+│   └── ...
 │
-├── templates/                   # Excel 模板目录
 ├── output/                      # 处理结果输出目录
 ├── assets/                      # 资源文件（见 assets/README.md）
 │   └── icons/                   # 应用图标（icon.ico）
@@ -99,10 +104,9 @@ Excel数据处理工具是一个功能强大的桌面应用程序，旨在简化
 - **app/**：应用层逻辑（主题、配置、规则执行、设置对话框、主窗口）。
 - **core/**：通用能力（检查更新、远程规则），与 Excel 业务解耦。
 - **config/**：配置文件目录，主配置为 `config/config.yaml`。
-- **rules/**：处理规则模块，每个规则为独立 .py 模块，可配对应 .md 说明。
-- **templates/**：各规则对应的 Excel 模板。
+- **rules/**：处理规则采用**子目录结构**。每个规则为 `rules/<rule_id>/`，内含 `<rule_id>.py`、`doc/template/*.xlsx`（模板）、可选 `doc/readme.md`。规则从 `rules_dir/<rule_id>/<rule_id>.py` 动态加载；模板路径为 `rules/<rule_id>/doc/template/<模板文件名>`。
 - **output/**：处理结果输出目录。
-- **tests/**：对 `app.config_loader`、`app.processor` 的单元测试，运行：`python -m unittest discover -s tests -v`。
+- **tests/**：对 `app.config_loader`、`app.processor` 的单元测试，运行：`python -m pytest tests -v` 或 `python -m unittest discover -s tests -v`。
 
 ## 🏗️ 架构设计
 
@@ -146,9 +150,9 @@ graph TB
     end
     
     subgraph "数据存储层"
-        Templates[模板文件<br/>templates/]
+        RulesData[规则与模板<br/>rules/]
         Output[输出文件<br/>output/]
-        Config[配置文件<br/>config.yaml]
+        Config[配置文件<br/>config/config.yaml]
     end
     
     UI --> App
@@ -163,7 +167,7 @@ graph TB
     RuleLoader --> RuleN
     FileProcessor --> Pandas
     FileProcessor --> OpenPyXL
-    App --> Templates
+    App --> RulesData
     App --> Output
     Rule1 --> Pandas
     Rule1 --> OpenPyXL
@@ -315,47 +319,21 @@ graph LR
 
 ### 安装步骤
 
-#### 方法一：使用虚拟环境（推荐）
-
-**Windows (批处理脚本)：**
+**推荐使用项目内虚拟环境（venv），勿在全局环境安装依赖。**
 
 ```bash
-# 1. 创建虚拟环境并安装依赖
-create_venv.bat
-
-# 2. 激活虚拟环境（如果未自动激活）
-venv\Scripts\activate.bat
-
-# 3. 安装依赖包
-pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
-```
-
-**Windows (PowerShell)：**
-
-```powershell
-# 1. 创建虚拟环境并安装依赖
-.\setup_env.ps1
-
-# 2. 激活虚拟环境（如果未自动激活）
-.\venv\Scripts\Activate.ps1
-
-# 3. 安装依赖包
-pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
-```
-
-#### 方法二：手动安装
-
-```bash
-# 1. 创建虚拟环境
+# 1. 在项目根目录创建虚拟环境
 python -m venv venv
 
 # 2. 激活虚拟环境
-# Windows
+# Windows (CMD)
 venv\Scripts\activate
+# Windows (PowerShell)
+.\venv\Scripts\Activate.ps1
 # Linux/Mac
 source venv/bin/activate
 
-# 3. 安装依赖包
+# 3. 安装依赖（建议使用国内镜像）
 pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 ```
 
@@ -380,39 +358,54 @@ pyinstaller excel_tool.spec
 
 ### 配置文件结构
 
-`config.yaml` 文件定义了规则和模板的映射关系：
+主配置文件为 **`config/config.yaml`**，定义规则与模板映射、远程规则、日志与更新等：
 
 ```yaml
 default_rule: continuous_work_rule  # 默认规则ID
 
+log:
+  dir: output
+  to_file: false
+
 rules:
-  continuous_work_rule:              # 规则ID
-    display_name: 连续工作超时检测    # 规则显示名称
-    template: 工作超6天查找.xlsx      # 对应的模板文件名
-  
-  canteen_deduction_rules:           # 规则ID
-    display_name: 食堂扣缴规则        # 规则显示名称
-    template: 食堂扣缴.xlsx          # 对应的模板文件名
+  continuous_work_rule:
+    display_name: 连续工作超时检测
+    template: 工作超6天查找.xlsx
+  canteen_deduction_rules:
+    display_name: 食堂扣缴规则
+    template: 食堂扣缴.xlsx
+
+rules_remote:                      # 可选，远程/本地规则清单
+  manifest_url: "https://... 或 本地目录路径"
+  source: local                    # local | remote
+  timeout: 15
+
+update:                             # 可选，检查更新
+  enabled: true
+  source: github
+  owner: 你的用户名
+  repo: excel-processing
+  tag_prefix: ''
 ```
 
 ### 配置项说明
 
-- **default_rule**：默认选中的规则ID
+- **default_rule**：默认选中的规则 ID（需与 `rules/` 下子目录名一致）。
 - **rules**：规则配置字典
-  - **规则ID**：对应 `rules/` 目录下的Python文件名（不含.py扩展名）
-  - **display_name**：在GUI界面中显示的规则名称
-  - **template**：对应的Excel模板文件名（位于 `templates/` 目录）
+  - **规则ID**：与 `rules/<rule_id>/` 子目录名一致，主模块为 `rules/<rule_id>/<rule_id>.py`。
+  - **display_name**：在 GUI 中显示的规则名称。
+  - **template**：该规则使用的 Excel 模板文件名，实际路径为 `rules/<rule_id>/doc/template/<template>`。
+- **rules_remote**（可选）：规则清单地址。`manifest_url` 可为远程 URL 或本地目录；`source` 为 `local` 或 `remote`。通过菜单可安装清单中的规则到本地 `rules/` 并合并配置。
 - **update**（可选）：检查更新配置
-  - **enabled**：是否启用更新检查（true/false）
-  - **source**：`github` 或 `gitee`
-  - **owner**：仓库所有者或组织名
-  - **repo**：仓库名
-  - **tag_prefix**：可选，仅当 Release 的 tag 符合该前缀时才视为本应用发布
+  - **enabled**：是否启用更新检查。
+  - **source**：`github` 或 `gitee`。
+  - **owner** / **repo**：仓库信息。
+  - **tag_prefix**：可选，仅当 Release 的 tag 符合该前缀时才视为本应用发布。
 
 ### 添加新规则配置
 
-1. 在 `rules/` 目录下创建新的规则模块文件（如 `my_rule.py`）
-2. 在 `config.yaml` 中添加规则配置：
+1. 在 `rules/` 下创建子目录并实现规则，例如 `rules/my_rule/my_rule.py`，模板放在 `rules/my_rule/doc/template/my_rule_template.xlsx`。
+2. 在 `config/config.yaml` 的 `rules` 下添加：
 
 ```yaml
 rules:
@@ -421,8 +414,7 @@ rules:
     template: my_rule_template.xlsx
 ```
 
-3. 在 `templates/` 目录下放置对应的模板文件
-4. 重启应用程序，新规则将自动加载
+3. 重启应用程序，新规则将按 `rules/<rule_id>/<rule_id>.py` 自动被发现并加载。
 
 ## 📌 版本管理与检查更新
 
@@ -486,10 +478,10 @@ A: 目前支持 `.xlsx` 格式的Excel文件。
 A: 处理大文件时可能需要较长时间，请耐心等待。建议文件大小不超过50MB。
 
 **Q: 规则加载失败？**  
-A: 检查`rules/`目录下是否存在对应的规则文件，以及`config.yaml`中的配置是否正确。
+A: 检查 `rules/<rule_id>/<rule_id>.py` 是否存在，以及 `config/config.yaml` 中是否配置了该规则。
 
 **Q: 模板文件找不到？**  
-A: 确保`templates/`目录下存在对应的模板文件，文件名需与`config.yaml`中的配置一致。
+A: 模板位于各规则目录内：`rules/<rule_id>/doc/template/<模板文件名>.xlsx`，文件名需与 `config.yaml` 中该规则的 `template` 一致。
 
 **Q: 处理结果不正确？**  
 A: 检查输入文件格式是否符合规则要求，参考对应规则的说明文档。
@@ -526,13 +518,13 @@ A: 检查输入文件格式是否符合规则要求，参考对应规则的说�
 **可能原因及解决方案**：
 
 - **规则文件不存在**
-  - 解决方案：检查`rules/`目录下是否存在规则文件（`.py`文件）
-  - 确保文件名与`config.yaml`中的规则ID一致
+  - 解决方案：检查是否存在 `rules/<rule_id>/<rule_id>.py`（规则ID 与 `config/config.yaml` 中一致）
+  - 规则采用子目录结构，不支持根目录下的单文件 `rules/*.py`
 
 - **规则文件语法错误**
-  - 解决方案：检查规则文件是否有语法错误
+  - 解决方案：检查规则主模块是否有语法错误
   ```bash
-  python -m py_compile rules/your_rule.py
+  python -m py_compile rules/your_rule/your_rule.py
   ```
 
 - **缺少必需函数**
@@ -566,8 +558,8 @@ A: 检查输入文件格式是否符合规则要求，参考对应规则的说�
 **可能原因及解决方案**：
 
 - **模板文件不存在**
-  - 解决方案：检查`templates/`目录下是否存在对应的模板文件
-  - 确保文件名与`config.yaml`中的配置一致
+  - 解决方案：检查 `rules/<rule_id>/doc/template/` 下是否存在对应的模板文件
+  - 确保文件名与 `config/config.yaml` 中该规则的 `template` 一致
 
 - **保存路径无权限**
   - 解决方案：选择有写入权限的目录保存模板文件
@@ -597,7 +589,7 @@ A: 检查输入文件格式是否符合规则要求，参考对应规则的说�
 **可能原因及解决方案**：
 
 - **缺少必需文件**
-  - 解决方案：确保`templates/`、`rules/`目录和`config.yaml`文件与exe文件在同一目录
+  - 解决方案：确保 `config/`、`rules/`（含各规则子目录及 `doc/template/`）与 exe 在同一目录
   - 检查打包配置（`excel_tool.spec`）是否正确包含所有文件
 
 - **杀毒软件拦截**
@@ -643,9 +635,9 @@ except Exception as e:
 **检查配置**：
 
 ```python
-# 验证配置文件
+# 验证配置文件（主配置在 config/config.yaml）
 import yaml
-with open('config.yaml', 'r', encoding='utf-8') as f:
+with open('config/config.yaml', 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
     print(config)
 ```
@@ -653,10 +645,17 @@ with open('config.yaml', 'r', encoding='utf-8') as f:
 **验证规则模块**：
 
 ```python
-# 测试规则模块导入
-import importlib
-rule_module = importlib.import_module('rules.canteen_deduction_rules')
-print(rule_module.get_rule_info())
+# 规则从 rules/<rule_id>/<rule_id>.py 按文件加载，可用 importlib.util 测试
+import importlib.util
+from pathlib import Path
+
+rules_dir = Path("rules")
+rule_id = "canteen_deduction_rules"
+rule_py = rules_dir / rule_id / f"{rule_id}.py"
+spec = importlib.util.spec_from_file_location(f"_rule_{rule_id}", rule_py)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+print(getattr(mod, "get_rule_info", lambda: {})())
 ```
 
 ## 🧩 自定义处理规则
@@ -730,20 +729,21 @@ def get_rule_info():
 
 ### 规则开发步骤
 
-1. **创建规则文件**
+1. **创建规则子目录与主模块**
    ```bash
-   # 在 rules/ 目录下创建新文件
-   rules/my_rule.py
+   # 在 rules/ 下创建子目录，主模块名为 <rule_id>.py
+   rules/my_rule/
+   rules/my_rule/my_rule.py
    ```
 
-2. **实现规则逻辑**
+2. **实现规则逻辑**（在 `rules/my_rule/my_rule.py` 中）
    ```python
    import pandas as pd
-   
+
    def process(data_df, **kwargs):
-       # 实现处理逻辑
+       # 实现处理逻辑，可返回 DataFrame 或 dict（多表）
        return result_df
-   
+
    def get_rule_info():
        return {
            "name": "我的规则",
@@ -753,15 +753,15 @@ def get_rule_info():
        }
    ```
 
-3. **创建模板文件**
+3. **放置模板与可选文档**
    ```bash
-   # 在 templates/ 目录下创建模板
-   templates/my_rule_template.xlsx
+   rules/my_rule/doc/template/my_rule_template.xlsx   # 模板
+   rules/my_rule/doc/readme.md                        # 可选说明
    ```
 
-4. **配置规则**
+4. **在 config 中配置规则**
    ```yaml
-   # 在 config.yaml 中添加配置
+   # config/config.yaml 的 rules 下添加
    rules:
      my_rule:
        display_name: 我的自定义规则
@@ -769,47 +769,48 @@ def get_rule_info():
    ```
 
 5. **测试规则**
-   - 重启应用程序
-   - 选择新规则进行测试
+   - 重启应用程序，新规则会从 `rules/my_rule/my_rule.py` 自动加载
+   - 在界面中选择该规则并测试
 
 ### 规则示例
 
-完整规则示例请参考：
-- `rules/canteen_deduction_rules.py` - [食堂扣缴规则说明](rules/canteen_deduction_rules.md)
-- `rules/continuous_work_rule.py` - [连续工作超时检测规则说明](rules/continuous_work_rule.md)
+完整规则示例请参考（均为子目录结构）：
+- `rules/canteen_deduction_rules/` — 食堂扣缴规则，说明见 `doc/readme.md`
+- `rules/continuous_work_rule/` — 连续工作超时检测，说明见 `doc/readme.md`
 
-更多规则文档请查看 [rules/README.md](rules/README.md)
+更多规则说明与索引见 [rules/README.md](rules/README.md)。
 
 ## 🧪 测试
 
 ### 运行测试
 
-目前项目暂未包含自动化测试套件，建议通过以下方式进行测试：
+项目包含对 `app.config_loader`、`app.processor` 的单元测试，可在项目根目录执行：
 
-1. **功能测试**：使用实际Excel文件测试各规则功能
-2. **边界测试**：测试空文件、大文件、格式错误文件等边界情况
-3. **集成测试**：测试完整的处理流程
+```bash
+# 使用 pytest（推荐）
+python -m pytest tests -v
+
+# 或使用 unittest
+python -m unittest discover -s tests -v
+```
+
+建议同时进行：
+
+1. **功能测试**：使用实际 Excel 文件测试各规则功能
+2. **边界测试**：测试空文件、大文件、格式错误文件等
+3. **集成测试**：测试完整处理流程（选规则 → 选文件 → 处理 → 查看结果）
 
 ### 测试建议
 
-- 使用小样本数据先进行测试
-- 验证处理结果的准确性
-- 检查输出文件的格式和内容
-- 测试不同规则之间的切换
+- 使用小样本数据先验证结果正确性
+- 检查输出文件格式与内容
+- 测试不同规则切换及模板路径（规则内 `doc/template/`）
 
 ### 测试策略说明
 
-- **单元测试**：建议为每个规则模块编写单元测试
-- **集成测试**：测试主程序与规则模块的集成
-- **用户验收测试**：使用真实业务数据进行测试
-- **性能测试**：测试大文件处理性能
-
-### 测试覆盖率
-
-当前项目暂未实现自动化测试，测试覆盖率为0%。建议后续添加：
-- pytest测试框架
-- 单元测试覆盖率目标：>80%
-- 集成测试覆盖主要功能流程
+- **单元测试**：`tests/test_config_loader.py`、`tests/test_processor.py` 等
+- **集成测试**：主程序与规则模块的集成
+- **性能测试**：大文件处理时可关注内存与耗时
 
 ## 📦 打包部署
 
@@ -856,42 +857,42 @@ python -m PyInstaller excel_tool.spec --clean
 `excel_tool.spec` 文件配置了以下内容：
 
 - **包含的文件**：
-  - `templates/` 目录（模板文件）
-  - `rules/` 目录（规则模块）
-  - `config.yaml`（配置文件）
+  - `config/` 目录（含 `config.yaml`）
+  - `rules/` 目录（规则子目录及各自 `doc/template/` 下的模板）
 
 - **隐藏导入**：
   - pandas, numpy, openpyxl, yaml
 
 - **图标**：`assets/icons/icon.ico`
 
-- **控制台**：设置为False（隐藏控制台窗口）
+- **控制台**：设置为 False（隐藏控制台窗口）
 
 ### 分发说明
 
-打包后的可执行文件包含所有依赖，可在没有Python环境的Windows系统上直接运行。
+打包后的可执行文件包含所有依赖，可在无 Python 环境的 Windows 上直接运行。
 
 **分发包结构**：
 
 ```
 Excel数据处理工具/
-├── Excel数据处理工具.exe    # 主程序可执行文件
-├── templates/                # 模板文件目录
-│   ├── 食堂扣缴.xlsx
-│   └── 工作超6天查找.xlsx
-├── rules/                    # 规则模块目录
-│   ├── __init__.py
-│   ├── canteen_deduction_rules.py
-│   └── continuous_work_rule.py
-└── config.yaml               # 配置文件
+├── Excel数据处理工具.exe    # 主程序
+├── config/
+│   └── config.yaml           # 主配置
+└── rules/                    # 规则（子目录结构）
+    ├── __init__.py
+    ├── canteen_deduction_rules/
+    │   ├── canteen_deduction_rules.py
+    │   └── doc/template/食堂扣缴.xlsx
+    └── continuous_work_rule/
+        ├── continuous_work_rule.py
+        └── doc/template/工作超6天查找.xlsx
 ```
 
 **分发步骤**：
 
-1. 使用PyInstaller打包生成exe文件
-2. 将`templates/`、`rules/`目录和`config.yaml`复制到exe文件同目录
-3. 确保目录结构完整
-4. 测试可执行文件是否正常运行
+1. 使用 PyInstaller 打包生成 exe（如 `scripts/build.bat` 或 `pyinstaller excel_tool.spec`）。
+2. 将 `config/`、`rules/` 与 exe 放在同一目录，保持上述结构。
+3. 测试可执行文件是否正常运行。
 
 **安装目录建议**：若需使用「检查更新」后的自动更新（下载并替换 exe），请将整个分发包放在**有写入权限的目录**（如用户目录下的文件夹）；避免放在 Program Files 等受保护目录，否则自动更新会提示手动下载。
 
@@ -969,16 +970,15 @@ chore: 构建过程或辅助工具的变动
 
 ### v1.0.0 (当前版本)
 
-- ✅ 实现基础Excel数据处理功能
-- ✅ 支持插件式规则架构
-- ✅ 实现食堂扣缴规则
-- ✅ 实现连续工作超时检测规则
-- ✅ 支持模板下载功能
-- ✅ 支持打包为可执行文件
-- ✅ 图形化用户界面
-- ✅ 版本管理（`version.py` 单一版本源，标题与关于显示版本）
-- ✅ 检查更新（帮助菜单，GitHub/Gitee Releases API）
-- ✅ 自动更新（下载新 exe 并替换后重启，无写权限时降级为打开下载链接）
+- ✅ 实现基础 Excel 数据处理功能
+- ✅ 插件式规则架构：规则采用子目录结构 `rules/<rule_id>/<rule_id>.py`，模板在 `rules/<rule_id>/doc/template/`
+- ✅ 内置规则：食堂扣缴规则、连续工作超时检测规则
+- ✅ 模板下载：从各规则目录内下载对应模板
+- ✅ 远程规则：支持从规则清单（本地/远程）安装规则到本地并合并配置
+- ✅ 打包为可执行文件（PyInstaller）
+- ✅ 图形化用户界面（PyQt6）
+- ✅ 版本管理（`version.py` 单一版本源）
+- ✅ 检查更新与自动更新（帮助菜单，GitHub/Gitee Releases）
 
 ## 👥 作者
 
