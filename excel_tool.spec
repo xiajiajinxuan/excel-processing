@@ -7,7 +7,6 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('templates', 'templates'),  # 包含模板文件夹
         ('rules', 'rules'),         # 包含规则文件夹
         ('config', 'config'),       # 配置目录（含 config.yaml）
         ('version.py', '.'),        # 版本号文件，便于在 exe 中访问

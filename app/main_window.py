@@ -40,7 +40,7 @@ from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon
 
 from version import __version__
 from core.update_checker import check_update, download_file
-from core.remote_rules import run_remote_rules_dialog
+from core.remote_rules import run_remote_rules_dialog, run_upload_rules_dialog
 
 # 设为 True 时隐藏「帮助-检查更新」菜单，恢复时改回 False
 HIDE_UPDATE_CHECK = True
@@ -53,7 +53,7 @@ from app.theme import (
     BUTTON_STYLE_SUCCESS,
     PANEL_STYLE,
 )
-from app.config_loader import load_config as load_config_data, get_project_paths
+from app.config_loader import load_config as load_config_data, get_project_paths, get_default_config
 from app.processor import (
     get_default_template_for_rule,
     list_rule_ids as processor_list_rule_ids,
@@ -79,7 +79,6 @@ class ExcelProcessingApp(QMainWindow):
         self.rules_dir = paths["rules_dir"]
         self.templates_dir = paths["templates_dir"]
         self.output_dir = paths["output_dir"]
-        self.templates_dir.mkdir(exist_ok=True)
         self.output_dir.mkdir(exist_ok=True)
         self.rules_dir.mkdir(exist_ok=True)
         self.config_dir.mkdir(parents=True, exist_ok=True)
@@ -88,6 +87,7 @@ class ExcelProcessingApp(QMainWindow):
         self.available_rules = []
         self.current_rule_id = None
         self._download_dialog = None
+        self.config = get_default_config()
 
         self.load_config()
         self._setup_ui()
@@ -234,6 +234,10 @@ class ExcelProcessingApp(QMainWindow):
         act_remote.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DriveNetIcon))
         act_remote.triggered.connect(self.on_remote_rules)
         rule_menu.addAction(act_remote)
+        act_upload = QAction("上传规则到远程", self)
+        act_upload.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_ArrowUp))
+        act_upload.triggered.connect(self.on_upload_rules)
+        rule_menu.addAction(act_upload)
         act_sync_local = QAction("更新本地规则", self)
         act_sync_local.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
         act_sync_local.triggered.connect(self.on_sync_local_rules)
@@ -269,7 +273,8 @@ class ExcelProcessingApp(QMainWindow):
         help_menu.addAction(act_about)
 
     def load_config(self):
-        self.config = load_config_data()
+        data = load_config_data()
+        self.config = data if isinstance(data, dict) else get_default_config()
         if not self.config_file.exists():
             self.save_config()
 
@@ -299,18 +304,27 @@ class ExcelProcessingApp(QMainWindow):
             subprocess.run(["xdg-open", str(path)], check=False)
 
     def get_rule_display_name(self, rule_id):
-        return self.config.get("rules", {}).get(rule_id, {}).get("display_name", rule_id)
+        if self.config is None:
+            return rule_id
+        rules = self.config.get("rules") or {}
+        return (rules.get(rule_id) or {}).get("display_name", rule_id)
 
     def get_rule_template(self, rule_id):
-        return self.config.get("rules", {}).get(rule_id, {}).get("template", "")
+        if self.config is None:
+            return ""
+        rules = self.config.get("rules") or {}
+        return (rules.get(rule_id) or {}).get("template", "")
 
     def _get_template_path(self, rule_id: str, template_name: str) -> Path:
         """模板路径：rules_dir / rule_id / doc / template / template_name。"""
         return self.rules_dir / rule_id / "doc" / "template" / template_name
 
     def get_rule_by_template(self, template_name):
-        for rule_id, rule_info in self.config.get("rules", {}).items():
-            if rule_info.get("template") == template_name:
+        if self.config is None:
+            return None
+        rules = self.config.get("rules") or {}
+        for rule_id, rule_info in rules.items():
+            if (rule_info or {}).get("template") == template_name:
                 return rule_id
         return None
 
@@ -323,6 +337,24 @@ class ExcelProcessingApp(QMainWindow):
             "BUTTON_STYLE_SECONDARY": BUTTON_STYLE_SECONDARY,
         }
         run_remote_rules_dialog(
+            self,
+            get_config=lambda: self.config,
+            save_config=self.save_config,
+            refresh_rule_list=self.update_rule_list,
+            styles=styles,
+            rules_dir=self.rules_dir,
+            templates_dir=self.templates_dir,
+        )
+
+    def on_upload_rules(self):
+        self.load_config()
+        styles = {
+            "COLORS": COLORS,
+            "FONT_FAMILY": FONT_FAMILY,
+            "BUTTON_STYLE_PRIMARY": BUTTON_STYLE_PRIMARY,
+            "BUTTON_STYLE_SECONDARY": BUTTON_STYLE_SECONDARY,
+        }
+        run_upload_rules_dialog(
             self,
             get_config=lambda: self.config,
             save_config=self.save_config,
@@ -484,7 +516,7 @@ del /f /q "%~f0" 2>nul
     def sync_local_rules(self):
         """对比 config 与 rules 目录：磁盘有而配置无则添加（display_name 取模板文件名），配置有而磁盘无则移除；保存并刷新列表。"""
         self.load_config()
-        if "rules" not in self.config:
+        if not isinstance(self.config.get("rules"), dict):
             self.config["rules"] = {}
         rules_dir = Path(self.rules_dir)
         if not rules_dir.exists():
@@ -683,26 +715,29 @@ del /f /q "%~f0" 2>nul
         init_path = self.rules_dir / "__init__.py"
         if not init_path.exists():
             init_path.write_text("# 规则包初始化文件\n", encoding="utf-8")
-        example_path = self.rules_dir / "example_rule.py"
-        if not example_path.exists():
-            example_path.write_text("""# 示例处理规则
+        example_rule_dir = self.rules_dir / "example_rule"
+        if example_rule_dir.exists():
+            return
+        example_rule_dir.mkdir(parents=True, exist_ok=True)
+        example_py = example_rule_dir / "example_rule.py"
+        example_py.write_text("""# -*- coding: utf-8 -*-
+\"\"\"示例规则 - 子目录结构，可被 list_rule_ids 发现。\"\"\"
 import pandas as pd
 
 def process(data_df, **kwargs):
     result_df = data_df.copy()
-    result_df['处理状态'] = '已处理'
+    result_df["处理状态"] = "已处理"
     return result_df
 
 def get_rule_info():
     return {"name": "示例规则", "description": "示例", "version": "1.0", "author": "系统"}
 """, encoding="utf-8")
-        if not self.templates_dir.exists():
-            self.templates_dir.mkdir(exist_ok=True)
-        example_template_path = self.templates_dir / "example_template.xlsx"
-        if not example_template_path.exists():
-            df = pd.DataFrame({"姓名": ["张三", "李四", "王五"], "年龄": [25, 30, 35], "部门": ["技术部", "市场部", "人事部"]})
-            df.to_excel(example_template_path, index=False)
-        self.log("已创建示例规则文件和模板")
+        template_dir = example_rule_dir / "doc" / "template"
+        template_dir.mkdir(parents=True, exist_ok=True)
+        template_path = template_dir / "example_template.xlsx"
+        df = pd.DataFrame({"姓名": ["张三", "李四", "王五"], "年龄": [25, 30, 35], "部门": ["技术部", "市场部", "人事部"]})
+        df.to_excel(template_path, index=False)
+        self.log("已创建示例规则（子目录结构）和模板")
 
     def _get_log_path(self) -> Path:
         return Path(self.config.get("log", {}).get("dir", "output")) / "app.log"

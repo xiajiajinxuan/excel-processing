@@ -11,13 +11,26 @@ import yaml
 CONFIG_DIR = Path("config")
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
+# 规则清单默认地址（本地来源）
+DEFAULT_RULES_MANIFEST_URL = r"\\10.5.128.5\aec文件共享\国光电子\IT部\对外资料\90_excel_rules"
+
 _DEFAULT_CONFIG = {
     "rules": {
         "example_rule": {"display_name": "示例规则", "template": "example_template.xlsx"}
     },
     "default_rule": "example_rule",
     "log": {"to_file": True, "dir": "output"},
+    "rules_remote": {
+        "source": "local",
+        "manifest_url": DEFAULT_RULES_MANIFEST_URL,
+        "timeout": 15,
+    },
 }
+
+
+def get_default_config() -> dict[str, Any]:
+    """返回默认配置的副本，用于在加载失败或返回 None 时保证 config 可用。"""
+    return dict(_DEFAULT_CONFIG)
 
 
 def load_config(base_path: Path | None = None) -> dict[str, Any]:
@@ -52,6 +65,16 @@ def load_config(base_path: Path | None = None) -> dict[str, Any]:
     log_cfg = data.setdefault("log", {})
     log_cfg.setdefault("to_file", True)
     log_cfg.setdefault("dir", "output")
+    # 兼容旧配置：规则清单来源默认为本地及默认地址
+    if "rules_remote" not in data:
+        data["rules_remote"] = {
+            "source": "local",
+            "manifest_url": DEFAULT_RULES_MANIFEST_URL,
+            "timeout": 15,
+        }
+    # 兼容：YAML 中 rules: 无值会解析为 None，统一为 dict
+    if not isinstance(data.get("rules"), dict):
+        data["rules"] = {}
     return data
 
 

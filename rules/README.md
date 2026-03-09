@@ -4,6 +4,18 @@
 
 ## 📚 规则列表
 
+### 0. 示例规则（开发参考）
+
+**规则ID**：`example_rule`  
+**目录**：[example_rule/](./example_rule/)  
+**文档**：[example_rule/doc/readme.md](./example_rule/doc/readme.md)  
+**模板**：`example_template.xlsx`
+
+**功能描述**：  
+用于说明新 rule 的目录架构、编写规范与配置对应关系；逻辑为对主表复制并增加「处理状态」列。开发新规则时请以此为准。
+
+---
+
 ### 1. 食堂扣缴规则
 
 **规则ID**：`canteen_deduction_rules`  
@@ -66,17 +78,17 @@
 
 如需开发新的处理规则，请参考：
 
-1. [项目主README](../README.md#自定义处理规则) - 规则开发指南
-2. 现有规则文件 - 参考实现示例
-3. 规则说明文档模板 - 参考文档格式
+1. **[示例规则 example_rule](./example_rule/)** — **新 rule 怎么写、遵循什么规范、目录架构**均以该示例为准；详细说明见 [example_rule/doc/readme.md](./example_rule/doc/readme.md)。
+2. [项目主 README](../README.md#自定义处理规则) - 规则开发指南
+3. 现有规则文件（如 `canteen_deduction_rules`、`continuous_work_rule`）- 参考实现示例
 
 ### 规则开发步骤
 
-1. 在`rules/`目录下创建新的Python文件（如`my_rule.py`）
-2. 实现`process()`和`get_rule_info()`函数
-3. 在`config.yaml`中配置规则
-4. 创建对应的模板文件
-5. 编写规则说明文档（参考现有文档格式）
+1. 在 `rules/` 目录下创建新的**子目录** `<rule_id>/`（如 `my_rule`），并在其中创建 **`<rule_id>.py`**（如 `my_rule.py`）作为规则入口。应用只发现「子目录且存在同名 .py」的规则，平铺在 `rules/` 下的 .py 不会被识别。
+2. 在入口模块中实现 **`process(data_df, **kwargs)`**；建议实现 **`get_rule_info()`**（见示例规则注释）。
+3. 在 `config/config.yaml` 的 `rules` 下添加该规则的 `display_name` 和 `template`（模板文件名）。
+4. 将模板 Excel 放在 **`rules/<rule_id>/doc/template/`** 下，文件名与配置中的 `template` 一致。
+5. 可选：在 `rules/<rule_id>/doc/readme.md` 编写规则说明（参考示例规则格式）。
 
 ## 📝 版本历史
 

@@ -269,6 +269,399 @@ def _get_local_rule_ids(rules_dir):
     return set(_list_rule_ids(Path(rules_dir)))
 
 
+def get_local_only_rule_ids(manifest_data, rules_dir):
+    """
+    计算「仅本地有而远程没有」的规则 ID 列表。
+    :param manifest_data: fetch_manifest 返回的 data（含 "rules" 列表），若为 None 则视为远程无规则
+    :param rules_dir: 本地 rules 目录（Path 或 str）
+    :return: 规则 ID 列表（已排序）
+    """
+    local_ids = _get_local_rule_ids(rules_dir)
+    remote_rules = (manifest_data or {}).get("rules") or []
+    remote_ids = {(r.get("rule_id") or "").strip() for r in remote_rules if (r.get("rule_id") or "").strip()}
+    only_local = sorted(local_ids - remote_ids)
+    return only_local
+
+
+def upload_rule_to_local(rule_id, rules_dir, config, base_path, on_dir_exists):
+    """
+    将一条本地规则复制到远程本地目录（仅 source=local 时使用）。
+    :param rule_id: 规则 ID
+    :param rules_dir: 本地 rules 目录（Path）
+    :param config: 主配置（用于取 display_name、template）
+    :param base_path: 远程规则文件根目录（Path），规则将复制到 base_path / rule_id /
+    :param on_dir_exists: 回调 (dest_dir: Path) -> "overwrite" | "skip" | "cancel"
+    :return: (success: bool, message: str)
+    """
+    rules_dir = Path(rules_dir)
+    base_path = Path(base_path)
+    src_dir = rules_dir / rule_id
+    if not src_dir.is_dir():
+        return False, f"本地规则目录不存在：{src_dir}"
+    dest_dir = base_path / rule_id
+    if dest_dir.exists():
+        choice = on_dir_exists(dest_dir)
+        if choice == "cancel":
+            return False, "用户取消"
+        if choice == "skip":
+            return True, "已跳过（目录已存在）"
+        try:
+            shutil.rmtree(dest_dir)
+        except OSError as e:
+            return False, f"删除已有目录失败：{e}"
+    try:
+        shutil.copytree(
+            src_dir,
+            dest_dir,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
+    except OSError as e:
+        return False, f"复制失败：{e}"
+    return True, ""
+
+
+def _get_remote_manifest_path(manifest_url, source):
+    """
+    返回远程清单文件路径与清单所在目录（仅 source=local 时有效）。
+    :return: (manifest_path: Path|None, manifest_dir: Path|None)
+    """
+    if not manifest_url or not str(manifest_url).strip():
+        return None, None
+    raw = str(manifest_url).strip()
+    if source != "local" and _is_remote_url(raw):
+        return None, None
+    p = Path(raw)
+    if not p.exists():
+        return None, None
+    if p.is_dir():
+        manifest_path = p / "rules_manifest.json"
+        manifest_dir = p
+    else:
+        manifest_path = p
+        manifest_dir = p.parent
+    return manifest_path, manifest_dir
+
+
+def read_remote_manifest(manifest_dir):
+    """
+    读取远程目录下的 rules_manifest.json。
+    :param manifest_dir: 清单所在目录（Path）
+    :return: (data: dict|None, error: str|None)。data 含 base_url、rules
+    """
+    manifest_dir = Path(manifest_dir)
+    manifest_path = manifest_dir / "rules_manifest.json"
+    if not manifest_path.exists():
+        return {"base_url": "rules", "rules": []}, None
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+        return None, str(e)
+    if not isinstance(data, dict):
+        return None, "清单格式错误"
+    if "rules" not in data or not isinstance(data["rules"], list):
+        data["rules"] = []
+    return data, None
+
+
+def write_remote_manifest(manifest_dir, data):
+    """
+    将 data 写回远程目录下的 rules_manifest.json。
+    :param manifest_dir: 清单所在目录（Path）
+    :param data: 含 base_url、rules 的字典
+    :return: (success: bool, error: str|None)
+    """
+    manifest_dir = Path(manifest_dir)
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = manifest_dir / "rules_manifest.json"
+    try:
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except OSError as e:
+        return False, str(e)
+    return True, None
+
+
+def update_remote_manifest_with_rules(manifest_dir, base_url, rule_entries):
+    """
+    将 rule_entries 合并到远程清单并写回。rule_entries 为列表，每项含 rule_id、display_name、template 等。
+    同 rule_id 的条目会覆盖。
+    :param manifest_dir: 清单所在目录（Path）
+    :param base_url: 保持不变的 base_url 字符串
+    :param rule_entries: 要合并的规则列表
+    :return: (success: bool, error: str|None)
+    """
+    data, err = read_remote_manifest(manifest_dir)
+    if err:
+        return False, err
+    data["base_url"] = base_url or data.get("base_url") or "rules"
+    rules_by_id = {r.get("rule_id"): r for r in data["rules"] if (r.get("rule_id") or "").strip()}
+    for entry in rule_entries:
+        rid = (entry.get("rule_id") or "").strip()
+        if rid:
+            rules_by_id[rid] = entry
+    data["rules"] = list(rules_by_id.values())
+    return write_remote_manifest(manifest_dir, data)
+
+
+def run_upload_rules_dialog(parent, get_config, save_config, refresh_rule_list, styles, rules_dir, templates_dir):
+    """
+    打开「上传规则到远程」对话框：仅当 rules_remote.source 为 local 时可用；
+    列出「仅本地有」的规则，用户勾选后上传到远程目录并更新 rules_manifest.json。
+    """
+    from PyQt6.QtWidgets import (
+        QDialog,
+        QVBoxLayout,
+        QHBoxLayout,
+        QTableWidget,
+        QTableWidgetItem,
+        QHeaderView,
+        QPushButton,
+        QLabel,
+        QMessageBox,
+        QAbstractItemView,
+        QCheckBox,
+        QWidget,
+        QApplication,
+    )
+    from PyQt6.QtCore import Qt
+
+    COLORS = styles.get("COLORS", {})
+    FONT_FAMILY = styles.get("FONT_FAMILY", "sans-serif")
+    BTN_PRIMARY = styles.get("BUTTON_STYLE_PRIMARY", "")
+    BTN_SECONDARY = styles.get("BUTTON_STYLE_SECONDARY", "")
+
+    rules_dir = Path(rules_dir)
+    templates_dir = Path(templates_dir)
+
+    class UploadRulesDialog(QDialog):
+        def __init__(self):
+            super().__init__(parent)
+            self.setWindowTitle("上传规则到远程")
+            self.setMinimumSize(520, 380)
+            self.resize(580, 420)
+            self._get_config = get_config
+            self._save_config = save_config
+            self._refresh_rule_list = refresh_rule_list
+            self._rules_dir = rules_dir
+            self._templates_dir = templates_dir
+            self._manifest_data = None
+            self._manifest_dir = None
+            self._base_url_str = None
+            self._base_path = None
+            self._local_only_ids = []
+            self._local_only_infos = []
+            self._setup_ui()
+
+        def _setup_ui(self):
+            self.setStyleSheet(
+                f"QDialog {{ background: {COLORS.get('bg', '#fff')}; }} "
+                f"QLabel {{ color: {COLORS.get('text', '#333')}; font-family: {FONT_FAMILY}; }} "
+                f"QTableWidget {{ background: {COLORS.get('surface', '#fff')}; border: 1px solid {COLORS.get('border', '#ddd')}; }} "
+            )
+            layout = QVBoxLayout(self)
+            layout.setSpacing(12)
+            layout.setContentsMargins(20, 20, 20, 20)
+
+            self._status_label = QLabel("请先点击「刷新」获取「仅本地有」的规则列表")
+            self._status_label.setStyleSheet(f"color: {COLORS.get('text_secondary', '#666')}; font-size: 13px;")
+            layout.addWidget(self._status_label)
+
+            self._table = QTableWidget(0, 4)
+            self._table.setHorizontalHeaderLabels(["选择", "规则 ID", "显示名称", "模板"])
+            self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+            self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+            self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            self._table.setColumnWidth(0, 50)
+            self._table.setColumnWidth(1, 140)
+            self._table.setColumnWidth(3, 100)
+            layout.addWidget(self._table)
+
+            btn_row = QHBoxLayout()
+            btn_refresh = QPushButton("刷新")
+            btn_refresh.setStyleSheet(BTN_SECONDARY)
+            btn_refresh.clicked.connect(self._on_refresh)
+            btn_select_all = QPushButton("全选")
+            btn_select_all.setStyleSheet(BTN_SECONDARY)
+            btn_select_all.clicked.connect(self._on_select_all)
+            btn_upload = QPushButton("上传选中")
+            btn_upload.setStyleSheet(BTN_PRIMARY)
+            btn_upload.clicked.connect(self._on_upload)
+            btn_close = QPushButton("关闭")
+            btn_close.setStyleSheet(BTN_SECONDARY)
+            btn_close.clicked.connect(self.accept)
+            btn_row.addWidget(btn_refresh)
+            btn_row.addWidget(btn_select_all)
+            btn_row.addWidget(btn_upload)
+            btn_row.addStretch()
+            btn_row.addWidget(btn_close)
+            layout.addLayout(btn_row)
+
+        def _get_remote_config(self):
+            cfg = self._get_config()
+            remote = (cfg or {}).get("rules_remote") or {}
+            src = (remote.get("source") or "remote").strip().lower()
+            if src not in ("remote", "local"):
+                src = "remote"
+            return {
+                "manifest_url": (remote.get("manifest_url") or "").strip(),
+                "source": src,
+                "timeout": int(remote.get("timeout") or 15),
+            }
+
+        def _on_refresh(self):
+            rcfg = self._get_remote_config()
+            if not rcfg["manifest_url"]:
+                QMessageBox.information(
+                    self,
+                    "提示",
+                    "请在「设置」->「编辑配置文件」中配置 rules_remote.manifest_url 后重试。",
+                )
+                return
+            if rcfg["source"] != "local" or _is_remote_url(rcfg["manifest_url"]):
+                QMessageBox.information(
+                    self,
+                    "上传仅支持本地",
+                    "上传仅支持规则清单来源为「本地」时使用。\n请在设置中将规则清单来源改为「本地」，并指定为本地或网络目录路径。",
+                )
+                return
+            self._status_label.setText("正在获取清单…")
+            QApplication.processEvents()
+            data, err = fetch_manifest(rcfg["manifest_url"], rcfg["timeout"], source=rcfg["source"])
+            if err:
+                self._status_label.setText("")
+                QMessageBox.warning(self, "获取清单失败", err)
+                return
+            self._manifest_data = data
+            self._manifest_dir = Path(rcfg["manifest_url"]).resolve() if Path(rcfg["manifest_url"]).is_dir() else Path(rcfg["manifest_url"]).resolve().parent
+            self._base_url_str = (data.get("base_url") or "rules").strip().rstrip("/")
+            base_path = data.get("base_url") or "rules"
+            if _is_remote_url(str(base_path)):
+                self._base_path = self._manifest_dir / "rules"
+            elif Path(base_path).is_absolute():
+                self._base_path = Path(base_path)
+            else:
+                self._base_path = (self._manifest_dir / base_path).resolve()
+            self._base_path = Path(self._base_path)
+            self._local_only_ids = get_local_only_rule_ids(data, self._rules_dir)
+            config = self._get_config()
+            rules_cfg = (config or {}).get("rules") or {}
+            self._local_only_infos = []
+            for rid in self._local_only_ids:
+                entry = rules_cfg.get(rid) or {}
+                self._local_only_infos.append({
+                    "rule_id": rid,
+                    "display_name": entry.get("display_name") or rid,
+                    "template": entry.get("template") or "",
+                })
+            self._fill_table()
+            if not self._local_only_ids:
+                self._status_label.setText("没有仅本地存在的规则，无需上传。")
+            else:
+                self._status_label.setText(f"共 {len(self._local_only_ids)} 条仅本地存在的规则，请勾选要上传的项。")
+
+        def _fill_table(self):
+            infos = self._local_only_infos or []
+            self._table.setRowCount(len(infos))
+            for row, info in enumerate(infos):
+                check = QCheckBox()
+                check.setChecked(False)
+                cell_widget = QWidget()
+                cell_layout = QHBoxLayout(cell_widget)
+                cell_layout.setContentsMargins(4, 0, 4, 0)
+                cell_layout.addWidget(check)
+                cell_layout.addStretch()
+                self._table.setCellWidget(row, 0, cell_widget)
+                self._table.setItem(row, 1, QTableWidgetItem(info.get("rule_id") or ""))
+                self._table.setItem(row, 2, QTableWidgetItem(info.get("display_name") or ""))
+                self._table.setItem(row, 3, QTableWidgetItem(info.get("template") or ""))
+                self._table.setRowHeight(row, 36)
+                setattr(check, "_rule_info", info)
+
+        def _on_select_all(self):
+            """全选：勾选列表中所有规则的复选框。"""
+            for row in range(self._table.rowCount()):
+                w = self._table.cellWidget(row, 0)
+                if w:
+                    cb = w.findChild(QCheckBox)
+                    if cb:
+                        cb.setChecked(True)
+
+        def _on_upload(self):
+            if not self._manifest_data or self._manifest_dir is None or self._base_path is None:
+                QMessageBox.information(self, "提示", "请先点击「刷新」。")
+                return
+            selected = []
+            for row in range(self._table.rowCount()):
+                w = self._table.cellWidget(row, 0)
+                if w:
+                    cb = w.findChild(QCheckBox)
+                    if cb and cb.isChecked():
+                        info = getattr(cb, "_rule_info", None)
+                        if info:
+                            selected.append(info)
+            if not selected:
+                QMessageBox.information(self, "提示", "请至少勾选一条规则。")
+                return
+
+            def on_dir_exists(dest_dir):
+                r = QMessageBox.question(
+                    self,
+                    "目录已存在",
+                    f"远程已存在目录：{dest_dir.name}\n是否覆盖？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+                    QMessageBox.StandardButton.Yes,
+                )
+                if r == QMessageBox.StandardButton.Yes:
+                    return "overwrite"
+                if r == QMessageBox.StandardButton.No:
+                    return "skip"
+                return "cancel"
+
+            config = self._get_config()
+            ok_count = 0
+            for info in selected:
+                rule_id = info.get("rule_id") or ""
+                success, msg = upload_rule_to_local(
+                    rule_id, self._rules_dir, config, self._base_path, on_dir_exists
+                )
+                if success:
+                    ok_count += 1
+                if msg and "用户取消" in msg:
+                    QMessageBox.information(self, "提示", "已取消上传。")
+                    return
+                if msg and "已跳过" not in msg and msg != "":
+                    QMessageBox.warning(self, "上传规则", f"规则 {rule_id}：{msg}")
+
+            if ok_count > 0:
+                success, err = update_remote_manifest_with_rules(
+                    self._manifest_dir, self._base_url_str, selected
+                )
+                if not success:
+                    QMessageBox.warning(self, "更新清单失败", f"文件已上传，但更新远程清单失败：{err}")
+                else:
+                    QMessageBox.information(self, "完成", f"已成功上传 {ok_count} 个规则，远程清单已更新。")
+                self._local_only_ids = get_local_only_rule_ids(self._manifest_data, self._rules_dir)
+                config = self._get_config()
+                rules_cfg = (config or {}).get("rules") or {}
+                self._local_only_infos = []
+                for rid in self._local_only_ids:
+                    entry = rules_cfg.get(rid) or {}
+                    self._local_only_infos.append({
+                        "rule_id": rid,
+                        "display_name": entry.get("display_name") or rid,
+                        "template": entry.get("template") or "",
+                    })
+                self._fill_table()
+                if not self._local_only_ids:
+                    self._status_label.setText("没有仅本地存在的规则，无需上传。")
+                else:
+                    self._status_label.setText(f"共 {len(self._local_only_ids)} 条仅本地存在的规则，请勾选要上传的项。")
+
+    dlg = UploadRulesDialog()
+    dlg.exec()
+
+
 def run_remote_rules_dialog(parent, get_config, save_config, refresh_rule_list, styles, rules_dir, templates_dir):
     """
     打开「从远程获取规则」对话框。

@@ -3,14 +3,20 @@ log:
   dir: output
   to_file: true
 rules:
-  canteen_deduction_rules:
-    display_name: 食堂扣缴规则
-    template: 食堂扣缴.xlsx
+  canteen_deduction_rule:
+    display_name: 食堂扣缴模版
+    template: 食堂扣缴模版.xlsx
   continuous_work_rule:
-    display_name: 连续工作超时检测
+    display_name: 工作超6天查找
     template: 工作超6天查找.xlsx
+  example_rule:
+    display_name: example_template
+    template: example_template.xlsx
+  pinyin_abbreviation_rule:
+    display_name: 拼音首写转换模版
+    template: 拼音首写转换模版.xlsx
 rules_remote:
-  manifest_url: D:/my_project/999_临时项目/rules
+  manifest_url: \\10.5.128.5\aec文件共享\国光电子\IT部\对外资料\90_excel_rules
   source: local
   timeout: 15
 update:

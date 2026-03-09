@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
+from app.config_loader import DEFAULT_RULES_MANIFEST_URL
 from app.theme import (
     COLORS,
     FONT_FAMILY,
@@ -226,13 +227,13 @@ class ConfigEditorDialog(QDialog):
         self.rules_table.setColumnWidth(0, 160)
 
         remote = self.config.get("rules_remote") or {}
-        src = (remote.get("source") or "remote").strip().lower()
+        src = (remote.get("source") or "local").strip().lower()
         if src not in ("remote", "local"):
-            src = "remote"
+            src = "local"
         idx = self.rules_source_combo.findData(src)
         if idx >= 0:
             self.rules_source_combo.setCurrentIndex(idx)
-        self.manifest_url_edit.setText(str(remote.get("manifest_url", "")).strip())
+        self.manifest_url_edit.setText(str(remote.get("manifest_url") or DEFAULT_RULES_MANIFEST_URL).strip())
         self.timeout_spin.setValue(int(remote.get("timeout") or 15))
         self._on_rules_source_changed()
 
@@ -265,7 +266,7 @@ class ConfigEditorDialog(QDialog):
 
         self.config.setdefault("rules_remote", {})
         self.config["rules_remote"]["manifest_url"] = self.manifest_url_edit.text().strip() or None
-        self.config["rules_remote"]["source"] = self.rules_source_combo.currentData() or "remote"
+        self.config["rules_remote"]["source"] = self.rules_source_combo.currentData() or "local"
         self.config["rules_remote"]["timeout"] = self.timeout_spin.value()
 
         if not HIDE_UPDATE_CHECK:
