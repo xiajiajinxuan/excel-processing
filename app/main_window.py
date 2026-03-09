@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import (
     QMenuBar,
     QPushButton,
     QSplitter,
+    QStyle,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -227,26 +228,33 @@ class ExcelProcessingApp(QMainWindow):
 
     def _setup_menu(self):
         menubar = self.menuBar()
+        style = self.style()
         rule_menu = menubar.addMenu("规则")
         act_remote = QAction("从远程获取规则", self)
+        act_remote.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DriveNetIcon))
         act_remote.triggered.connect(self.on_remote_rules)
         rule_menu.addAction(act_remote)
         act_sync_local = QAction("更新本地规则", self)
+        act_sync_local.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
         act_sync_local.triggered.connect(self.on_sync_local_rules)
         rule_menu.addAction(act_sync_local)
         settings_menu = menubar.addMenu("设置")
         act_edit_config = QAction("编辑配置文件…", self)
+        act_edit_config.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileIcon))
         act_edit_config.triggered.connect(self.on_edit_config)
         settings_menu.addAction(act_edit_config)
         act_show_config_dir = QAction("打开配置目录", self)
+        act_show_config_dir.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DirIcon))
         act_show_config_dir.triggered.connect(self.on_show_config_dir)
         settings_menu.addAction(act_show_config_dir)
         help_menu = menubar.addMenu("帮助")
         if not HIDE_UPDATE_CHECK:
             act_update = QAction("检查更新", self)
+            act_update.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
             act_update.triggered.connect(self.on_check_update)
             help_menu.addAction(act_update)
         act_log_dir = QAction("打开日志目录", self)
+        act_log_dir.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DirIcon))
         act_log_dir.triggered.connect(self.on_open_log_dir)
         help_menu.addAction(act_log_dir)
         _github_icon_path = self._github_icon_path()
@@ -256,6 +264,7 @@ class ExcelProcessingApp(QMainWindow):
         act_github.triggered.connect(self.on_open_github)
         help_menu.addAction(act_github)
         act_about = QAction("关于", self)
+        act_about.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
         act_about.triggered.connect(self.show_about)
         help_menu.addAction(act_about)
 
