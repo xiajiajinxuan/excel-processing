@@ -53,8 +53,8 @@ class TestProcessor(unittest.TestCase):
                 self.assertEqual(list(result["X"]), [10])
                 self.assertEqual(list(result["Y"]), [20])
 
-    def test_write_result_to_excel_dict_with_deduction_record(self):
-        """dict 结果带 deduction_record 时应写入对应工作表。"""
+    def test_write_result_to_excel_dict_with_mapping(self):
+        """dict 结果应默认使用 key 作为表名，可通过映射重命名。"""
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             excel_path = tmp_path / "canteen.xlsx"
@@ -64,9 +64,22 @@ class TestProcessor(unittest.TestCase):
                 "deduction_record": pd.DataFrame({"日期": [date(2025, 1, 1)], "金额": [10]}),
             }
             output_dir = tmp_path / "out"
+
+            # 默认行为：使用 key 作为工作表名称
             out_path = write_result_to_excel(str(excel_path), result, output_dir)
             self.assertTrue(out_path.exists())
             with pd.ExcelFile(out_path) as xls:
+                self.assertIn("deduction_record", xls.sheet_names)
+
+            # 通过 sheet_mapping 映射为自定义表名
+            out_path2 = write_result_to_excel(
+                str(excel_path),
+                result,
+                output_dir,
+                sheet_mapping={"deduction_record": "扣缴记录"},
+            )
+            self.assertTrue(out_path2.exists())
+            with pd.ExcelFile(out_path2) as xls:
                 self.assertIn("扣缴记录", xls.sheet_names)
 
     def test_run_rule_missing_module(self):

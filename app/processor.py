@@ -58,9 +58,15 @@ def write_result_to_excel(
     file_path: str,
     result: Any,
     output_dir: Path,
+    sheet_mapping: dict[str, str] | None = None,
 ) -> Path:
     """
     将处理结果写入 Excel：保留原表，新增结果工作表。
+
+    - 若 result 为 DataFrame：写入名为「结果」的工作表。
+    - 若 result 为 dict[str, DataFrame]：默认以 key 作为工作表名，
+      如需映射可通过 sheet_mapping 提供「逻辑名 → 表名」。
+
     :return: 输出文件路径。
     """
     output_dir = Path(output_dir)
@@ -69,17 +75,12 @@ def write_result_to_excel(
     base_name = Path(file_name).stem
     output_file = output_dir / f"{base_name}_processed.xlsx"
 
-    original_dfs = {}
+    original_dfs: dict[str, pd.DataFrame] = {}
     with pd.ExcelFile(file_path) as xls:
         for sheet_name in xls.sheet_names:
             original_dfs[sheet_name] = pd.read_excel(xls, sheet_name=sheet_name)
 
-    if isinstance(result, dict) and "deduction_record" in result and "日期" in result["deduction_record"].columns:
-        result["deduction_record"]["日期"] = (
-            pd.to_datetime(result["deduction_record"]["日期"]).dt.strftime("%Y-%m-%d")
-        )
-
-    sheet_mapping = {"deduction_record": "扣缴记录", "monthly_summary": "月度汇总"}
+    sheet_mapping = sheet_mapping or {}
     with pd.ExcelWriter(output_file, engine="openpyxl") as writer:
         for sheet_name, df in original_dfs.items():
             df.to_excel(writer, sheet_name=sheet_name, index=False)

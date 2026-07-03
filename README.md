@@ -675,10 +675,10 @@ print(getattr(mod, "get_rule_info", lambda: {})())
 - `**kwargs`：其他参数，通常包含 `excel_file`（Excel文件路径）
 
 **返回值**：
-- `pandas.DataFrame`：处理后的数据（单表结果）
-- `dict`：包含多个DataFrame的字典（多表结果）
-  - 字典的key将作为工作表名称
-  - 字典的value是DataFrame对象
+- `pandas.DataFrame`：处理后的数据（单表结果），应用会将其写入名为 `结果` 的工作表
+- `dict[str, pandas.DataFrame]`：包含多个DataFrame的字典（多表结果）
+  - 字典的 key 默认直接作为工作表名称写入
+  - 如需使用与逻辑名不同的工作表名称，可在调用 `write_result_to_excel(..., sheet_mapping=...)` 时提供映射
 
 **示例**：
 

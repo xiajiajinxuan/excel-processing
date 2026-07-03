@@ -15,6 +15,9 @@ rules:
   pinyin_abbreviation_rule:
     display_name: 拼音首写转换模版
     template: 拼音首写转换模版.xlsx
+  maturity_balance:
+    display_name: 本币到期余额计算
+    template: 本币到期余额模板.xlsx
 rules_remote:
   manifest_url: \\10.5.128.5\aec文件共享\国光电子\IT部\对外资料\90_excel_rules
   source: local

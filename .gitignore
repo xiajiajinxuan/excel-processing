@@ -155,3 +155,4 @@ docs/
 # rules: 忽略除 __init__.py 外的所有文件
 rules/*
 !rules/__init__.py
+rules/example_rule/
